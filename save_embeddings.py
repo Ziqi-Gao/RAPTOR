@@ -171,7 +171,7 @@ def main():
 
     args = parser.parse_args()
 
-    # 准备数据
+    # Prepare input samples.
     if args.concept:
         one_pkl = os.path.join('dataset', 'raw', f"{args.concept}.pkl")
         if not os.path.isfile(one_pkl):
@@ -188,7 +188,7 @@ def main():
         pos_q, neg_q, _, _ = DP.dispacher()
         dataset_tag = args.dataset
 
-    # 收集初始 embedding
+    # Collect raw hidden-state embeddings.
     X_pos, X_neg, L, d = collect_embeddings(
         model_id=args.model,
         cache_dir=args.model_path,
@@ -198,21 +198,21 @@ def main():
         neg_q=neg_q,
     )
 
-    # 准备输出
+    # Prepare output file path.
     os.makedirs(args.savepath, exist_ok=True)
     model_tag = args.model.replace('/', '-')
     base_name = f"{model_tag}_{dataset_tag}"
     out_npz = os.path.join(args.savepath, f"{base_name}_embeddings.npz")
 
-    # 打包保存（压缩）
+    # Build compressed payload.
     save_dict = {}
     for l in range(L):
         save_dict[f"X_pos_{l}"] = X_pos[l]
         save_dict[f"X_neg_{l}"] = X_neg[l]
-    # 简单标签（对齐 main1.py 的正负定义：正=1，负=0）
+    # Binary labels follow the legacy convention: pos=1, neg=0.
     save_dict["y_pos"] = np.ones(len(X_pos[0]), dtype=int) if L > 0 and len(X_pos[0]) else np.array([], dtype=int)
     save_dict["y_neg"] = np.zeros(len(X_neg[0]), dtype=int) if L > 0 and len(X_neg[0]) else np.array([], dtype=int)
-    # 元信息
+    # Metadata fields.
     save_dict["meta_model"] = np.array([args.model])
     save_dict["meta_dataset"] = np.array([dataset_tag])
     save_dict["meta_layers"] = np.array([L])

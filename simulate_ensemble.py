@@ -62,8 +62,8 @@ def run_ensemble_bagging(
     standardize_logits: bool=True,
     solver: str="lbfgs", penalty: str="l2", C: float=1.0, max_iter: int=1000,
     random_state: int=0, n_jobs: Optional[int]=None,
-    summary_only: bool = True,                  # NEW: 仅输出汇总
-    return_details: bool = True,                # NEW: 返回 (acc, nonconv)
+    summary_only: bool = True,                  # NEW: print summary only
+    return_details: bool = True,                # NEW: return (acc, nonconv)
     save_path: Optional[str]=None
 ) -> Union[float, Tuple[float, int]]:
     t0 = time.perf_counter()
@@ -136,7 +136,7 @@ def run_ensemble_bagging(
 
     return (acc, n_not_conv) if return_details else acc
 
-# ---- optional CLI (仅打印汇总) ----
+# ---- optional CLI (summary output only) ----
 def _gen_toy(n: int, d: int, seed: int = 0) -> Tuple[np.ndarray, np.ndarray]:
     rng = np.random.RandomState(seed)
     u = rng.normal(size=d); u /= max(1e-12, np.linalg.norm(u))

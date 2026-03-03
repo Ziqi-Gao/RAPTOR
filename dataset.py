@@ -64,7 +64,7 @@ class DataProcessing():
             p, q = self.hatexplain()
             prompt = 'According to the comment, tell whether they present hate speech or not.'
         else:
-            # 如果都不符合，直接报错
+            # Fail fast on unknown dataset names.
             raise ValueError(f"Unknown dataset {self.data_name}")
         print(f" ### Positive sample number: {len(p)},  Negative sample number: {len(q)} ### ")
         return p, q, prompt, cot

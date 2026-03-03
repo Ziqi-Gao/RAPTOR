@@ -1,9 +1,9 @@
 #!/usr/bin/env python3
 """
-在真实数据集的 embedding 上调节 LR 正则化强度 C，并比较 singleLR / bagging / ensemble 的准确率。
+Tune logistic regularization C on real embedding datasets and compare
+singleLR / bagging / ensemble / xRFM accuracy.
 
-前置：先用 save_embeddings.py 生成形如 *_embeddings.npz 的文件（含 X_pos_i / X_neg_i）。
-默认会对三种方法都做 C 网格 +（可选）细扫，然后在训练集上用最佳 C 重训、在测试集上汇报 acc。
+Prerequisite: generate *_embeddings.npz files with save_embeddings.py.
 """
 import argparse
 import time
@@ -18,7 +18,7 @@ from simulate_bagging import run_bagging_simple
 from simulate_ensemble import run_ensemble_bagging
 from simulate_xrfm import run_xrfm
 
-# Fine-tune grid for single LR: 1e-6 → 1e2，等比 30 步。
+# Dense geometric grid for single LR tuning.
 SINGLE_FINE_GRID = np.logspace(np.log10(1e-4), np.log10(100.0), num=100, dtype=float)
 
 
@@ -214,7 +214,7 @@ def main():
         )
     else:
         X_tr_tr, y_tr_tr = X_tr, y_tr
-        X_val, y_val = X_te, y_te  # 占位
+        X_val, y_val = X_te, y_te  # Placeholder.
 
     results = []
 
@@ -230,7 +230,7 @@ def main():
         results.append({"method": "single", "acc": acc, "best_C": best_C, "val_acc": best_val, "extra": ""})
 
     if "xrfm" in methods:
-        # 使用论文风格的随机搜索超参（内部完成），C 参数无意义，仅占位
+        # xRFM uses its own internal search; C is a compatibility placeholder.
         acc, best_val, best_h = run_xrfm(
             X_tr, y_tr, X_te, y_te,
             C=1.0, val_size=args.val_size,
@@ -242,7 +242,7 @@ def main():
         results.append({"method": "xrfm", "acc": acc, "best_C": "paper_search", "val_acc": best_val, "extra": f"hparams={best_h}"})
 
     if "bagging" in methods:
-        # 固定 C=1，不做调参
+        # Keep C fixed at 1.0 for this baseline.
         best_C, best_val = 1.0, -1.0
         bag_ret = run_bagging_simple(
             X_tr, y_tr, X_te, y_te, alpha=args.alpha, M=args.M,
@@ -257,7 +257,7 @@ def main():
         results.append({"method": "bagging", "acc": acc, "best_C": best_C, "val_acc": best_val, "extra": f"non_converged={n_nc}"})
 
     if "ensemble" in methods:
-        # 固定 C=1，不做调参
+        # Keep C fixed at 1.0 for this baseline.
         best_C, best_val = 1.0, -1.0
         ens_ret = run_ensemble_bagging(
             X_tr, y_tr, X_te, y_te, alpha=args.alpha, M=args.M, agg=args.agg,

@@ -1,9 +1,10 @@
 #!/usr/bin/env python3
 """
-simulate_xrfm.py — 使用作者 neural_controllers 仓库中的 RFM probe 实现。
+simulate_xrfm.py
 
-接口仍与 simulate_singleLR.run_single_lr 保持一致，输入 (X_train, y_train, X_test, y_test)，
-返回测试集指标，必要时返回验证集指标与最优超参。
+Adapter around the neural_controllers + xRFM probe implementation.
+The callable interface mirrors simulate_singleLR.run_single_lr and
+accepts (X_train, y_train, X_test, y_test).
 """
 from __future__ import annotations
 
@@ -18,7 +19,7 @@ import numpy as np
 from sklearn.model_selection import train_test_split
 from sklearn.preprocessing import StandardScaler
 
-# ---- 依赖：neural_controllers 仓库 & xrfm ----
+# ---- Dependencies: neural_controllers_repo + xRFM ----
 REPO_PROBE_PATH = Path(__file__).resolve().parent / "neural_controllers_repo"
 if REPO_PROBE_PATH.exists():
     sys.path.insert(0, str(REPO_PROBE_PATH))
@@ -27,7 +28,7 @@ try:
     import torch
     import direction_utils as nc_direction_utils
     from xrfm import RFM
-except ImportError as e:  # pragma: no cover - 环境缺失时抛出
+except ImportError as e:  # pragma: no cover - raised when deps are unavailable
     raise ImportError(
         "需要安装 xrfm，并确保 neural_controllers_repo 位于当前目录（或已在 PYTHONPATH 中）。"
     ) from e
@@ -64,8 +65,10 @@ def _train_rfm_like_repo(
     device_str: str,
 ) -> Tuple[RFM, float, Dict[str, Any], torch.Tensor]:
     """
-    按作者 neural_controllers 的实现搜索 RFM，基于预测指标选择最优。
-    返回 (最佳模型, 验证评分, 最优超参, 概念向量)。
+    Run the neural_controllers-style xRFM search and pick the best model
+    by validation metric.
+
+    Returns (best_model, best_val_score, best_hparams, concept_vector).
     """
     if not search_space:
         search_space = {
@@ -81,7 +84,7 @@ def _train_rfm_like_repo(
     best_concept_vector: Optional[torch.Tensor] = None
     caught_errors = []
 
-    # xRFM 内部对 accuracy 使用关键字 "accuracy" 而非 "acc"
+    # xRFM expects "accuracy" instead of "acc".
     rfm_metric = "accuracy" if tuning_metric == "acc" else tuning_metric
 
     for reg in search_space["regs"]:
@@ -167,39 +170,40 @@ def run_xrfm(
     X_test: np.ndarray,
     y_test: np.ndarray,
     *,
-    solver: str = "lbfgs",        # 占位，为兼容 singleLR 接口
-    max_iter: int = 1000,         # 占位，默认会被 rfm_iters 覆盖/截断
-    C: float = 1.0,               # 占位，为兼容 singleLR 接口
-    penalty: str = "l2",          # 占位，为兼容 singleLR 接口
-    n_jobs: Optional[int] = None, # 占位，为兼容 singleLR 接口
+    solver: str = "lbfgs",        # Placeholder for singleLR API compatibility.
+    max_iter: int = 1000,         # Placeholder; may be overridden by rfm_iters.
+    C: float = 1.0,               # Placeholder for singleLR API compatibility.
+    penalty: str = "l2",          # Placeholder for singleLR API compatibility.
+    n_jobs: Optional[int] = None, # Placeholder for singleLR API compatibility.
     summary_only: bool = True,
     save_path: Optional[str] = None,
     val_size: float = 0.2,
     rfm_iters: Optional[int] = None,
-    n_trees: int = 1,             # 保留占位，当前实现未用
-    n_tree_iters: int = 0,        # 保留占位，当前实现未用
-    split_method: str = "top_vector_agop_on_subset",  # 保留占位，当前实现未用
-    max_leaf_size: int = 60_000,  # 保留占位，当前实现未用
+    n_trees: int = 1,             # Reserved placeholder, unused in current adapter.
+    n_tree_iters: int = 0,        # Reserved placeholder, unused in current adapter.
+    split_method: str = "top_vector_agop_on_subset",  # Reserved placeholder.
+    max_leaf_size: int = 60_000,  # Reserved placeholder, unused in current adapter.
     tuning_metric: str = "accuracy",
     random_state: Optional[int] = None,
-    n_threads: Optional[int] = None,   # 保留占位，当前实现未用
-    use_default_params: bool = False,  # 兼容旧接口；当前忽略，始终按作者搜索空间
-    hparam_trials: int = 8,       # 兼容旧接口；当前忽略，使用固定搜索空间
+    n_threads: Optional[int] = None,   # Reserved placeholder, unused in current adapter.
+    use_default_params: bool = False,  # Kept for backward compatibility; ignored.
+    hparam_trials: int = 8,       # Kept for backward compatibility; ignored.
     standardize: bool = True,
     return_details: bool = False,
-    split_subset_size: int = 1500,  # 保留占位，当前实现未用
+    split_subset_size: int = 1500,  # Reserved placeholder, unused in current adapter.
     n_components: int = 1,
     return_concept: bool = False,
     concept_save_path: Optional[str] = None,
 ) -> Union[float, Tuple[Any, ...]]:
     """
-    用 neural_controllers 的 RFM probe 训练一个探针，返回测试集准确率（或指定指标）。
+    Train an xRFM probe through neural_controllers and report test metric.
 
-    - solver/penalty/C/n_jobs 等参数仅为接口兼容，不参与 RFM 训练。
-    - tuning_metric 支持 acc/auc/f1/top_agop_vectors_ols_auc/mse，默认兼容传入 accuracy->acc。
-    - return_details=True 时返回 (test_metric, val_metric, best_hparams)。
+    Notes:
+    - solver/penalty/C/n_jobs are API-compat placeholders only.
+    - tuning_metric supports acc/auc/f1/top_agop_vectors_ols_auc/mse.
+    - return_details=True returns (test_metric, val_metric, best_hparams).
     """
-    del solver, penalty, n_jobs, C, n_trees, n_tree_iters, split_method, max_leaf_size, n_threads, use_default_params, hparam_trials, split_subset_size  # 占位变量避免未使用告警
+    del solver, penalty, n_jobs, C, n_trees, n_tree_iters, split_method, max_leaf_size, n_threads, use_default_params, hparam_trials, split_subset_size  # Drop compatibility placeholders.
 
     t0 = time.perf_counter()
     metric_key = _normalize_metric_name(tuning_metric)
@@ -241,7 +245,7 @@ def run_xrfm(
         "rfm_iters": int(rfm_iters if rfm_iters is not None else min(max_iter, 10)),
         "n_components": int(max(1, n_components)),
     }
-    search_space = {}  # 保留兼容参数，当前搜索空间由 _train_rfm_like_repo 内部定义
+    search_space = {}  # Search space is defined inside _train_rfm_like_repo.
 
     def _search_on_device(device_label: str):
         return _train_rfm_like_repo(
@@ -257,7 +261,7 @@ def run_xrfm(
 
     best_model, best_val_score, best_h, concept_vec = _search_on_device(device_str)
 
-    # 若 GPU 搜索失败，自动尝试 CPU；输出首条异常摘要，便于排查
+    # If GPU search fails, automatically retry on CPU.
     if best_model is None and device_str == "cuda":
         err_summary = best_h.get("errors", []) if isinstance(best_h, dict) else []
         if err_summary:
