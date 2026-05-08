@@ -28,11 +28,13 @@ src/raptor/
     run_raptor.py                 RAPTOR layer-wise probes
     run_xrfm.py                   xRFM layer-wise baseline
     run_gcs.py                    GCS layer-wise baseline
+    check_separability.py         Linear separability diagnostics
     layer_task.py                 Single-layer task helper for cluster arrays
     robustness.py                 Occlusion robustness runs
     structure_validation.py       Accuracy-structure validation
   steering/
     generate.py                   Activation steering generation
+    evaluate.py                   LLM-judge steering evaluation
 
 scripts/                          Thin command-line wrappers
 scripts/plotting/                 Paper figure helpers
@@ -162,6 +164,15 @@ python scripts/validate_accuracy_structure.py \
   --out exp_results/acc_structure/llama8b_stsa_layer10
 ```
 
+Linear separability diagnostics:
+
+```bash
+python scripts/check_separability.py \
+  --emb-dir embeddings_all \
+  --datasets STSA,sarcasm \
+  --out exp_results/separability
+```
+
 Activation steering:
 
 ```bash
@@ -171,6 +182,17 @@ python scripts/steer.py \
   --vector-kind singlelr \
   --savepath exp_results
 ```
+
+LLM-judge steering evaluation:
+
+```bash
+python scripts/evaluate_steering.py \
+  --in_csv outputs/steering_results.csv \
+  --out_csv outputs/steering_evaluation.csv \
+  --concept_desc joyful
+```
+
+Set the OpenAI API key in your shell environment before running the judge.
 
 ## Adding New Experiments
 

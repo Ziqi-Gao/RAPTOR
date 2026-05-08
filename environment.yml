@@ -18,6 +18,7 @@ dependencies:
       - accelerate
       - baukit
       - datasets
+      - openai
       - sentencepiece
       - transformers
       - bitsandbytes
