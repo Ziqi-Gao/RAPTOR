@@ -1,0 +1,26 @@
+models:
+  - google/gemma-7b-it
+  - meta-llama/Meta-Llama-3.1-8B-Instruct
+  - meta-llama/Meta-Llama-3.1-70B-Instruct
+  - meta-llama/Llama-3.3-70B-Instruct
+  - Qwen/Qwen2.5-3B-Instruct
+  - Qwen/Qwen2.5-7B-Instruct
+  - Qwen/Qwen2.5-32B-Instruct
+
+datasets:
+  - STSA
+  - sarcasm
+  - hatexplain
+  - counterfact
+  - cities
+  - common
+
+splits:
+  test_size: 0.2
+  val_size: 0.2
+  seed: 42
+
+methods:
+  - singlelr
+  - xrfm
+  - gcs

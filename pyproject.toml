@@ -1,0 +1,25 @@
+[build-system]
+requires = ["setuptools>=68", "wheel"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "raptor-probes"
+version = "0.1.0"
+description = "RAPTOR: Ridge-Adaptive Logistic Probes experiment code"
+readme = "README.md"
+requires-python = ">=3.10"
+dependencies = [
+  "numpy",
+  "scipy",
+  "pandas",
+  "scikit-learn",
+  "matplotlib",
+  "tqdm",
+  "torch",
+  "transformers",
+  "datasets",
+  "accelerate",
+]
+
+[tool.setuptools.packages.find]
+where = ["src"]

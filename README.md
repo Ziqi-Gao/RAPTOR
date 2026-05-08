@@ -1,159 +1,190 @@
 # RAPTOR: Ridge-Adaptive Logistic Probes
 
-This repository accompanies the paper:
+This repository contains the code for:
 
 **RAPTOR: Ridge-Adaptive Logistic Probes**  
 Ziqi Gao, Yaotian Zhu, Qingcheng Zeng, Xu Zhao, Ziqing Wang, Feng Ruan, Kaize Ding  
-arXiv: https://arxiv.org/abs/2602.00158
+arXiv: <https://arxiv.org/abs/2602.00158>
 
-## TL;DR
+RAPTOR trains ridge-regularized logistic probes on frozen LLM hidden states.
+The validation split selects the regularization strength, the final probe is
+refit on train plus validation data, and the learned weights are folded back to
+the original hidden-state coordinate system for concept-vector use.
 
-RAPTOR is a ridge-regularized logistic probe with validation-tuned regularization strength.  
-It is designed for probe-then-steer workflows where concept vectors should be:
+## Repository Layout
 
-- accurate,
-- directionally stable under small data perturbations,
-- cheap to train at scale.
+```text
+src/raptor/
+  core.py                         Shared model/dataset config, splits, I/O helpers
+  data.py                         Six RAPTOR benchmark dataset loaders
+  embeddings.py                   Hidden-state extraction
+  model_utils.py                  LLM hidden-state tracing helper
+  probes/
+    tuning.py                     RAPTOR C-grid tuning
+    gcs_sampler.py                GCS probe sampler
+    xrfm.py                       xRFM adapter
+  experiments/
+    benchmark.py                  End-to-end benchmark entrypoint
+    run_raptor.py                 RAPTOR layer-wise probes
+    run_xrfm.py                   xRFM layer-wise baseline
+    run_gcs.py                    GCS layer-wise baseline
+    layer_task.py                 Single-layer task helper for cluster arrays
+    robustness.py                 Occlusion robustness runs
+    structure_validation.py       Accuracy-structure validation
+  steering/
+    generate.py                   Activation steering generation
 
-This repo provides the experiment pipeline centered on `run_experiments.py`.
+scripts/                          Thin command-line wrappers
+scripts/plotting/                 Paper figure helpers
+configs/default.yaml              Default paper grid
+dataset/                          Small benchmark data files
+data/hatexplain/                  Hugging Face dataset loader for HateXplain
+```
 
-## What This Code Reproduces
+The computational logic from the original experiment scripts is preserved; this
+cleanup reorganizes imports, removes unrelated code, and removes machine-local
+paths and generated artifacts from version control.
 
-The current main pipeline reproduces the probe benchmark part of the paper:
-
-- layer-wise probe training and evaluation,
-- comparisons against xRFM and GCS,
-- shared train/val/test splits per `(model, dataset)`.
-
-Primary entrypoint:
-
-- `run_experiments.py`
-
-Core methods:
-
-- RAPTOR: `run_singlelr.py`
-- xRFM baseline: `run_xrfm.py`
-- GCS baseline: `run_gcs.py`
-
-Embedding extraction:
-
-- `run_embeddings.py` and `save_embeddings.py`
-
-## Main Findings (from paper)
-
-From Table 1 in arXiv v2 (`2602.00158v2`):
-
-- Across 42 `(model, dataset)` settings, RAPTOR improves **average layer accuracy** over GCS in **42/42** settings.
-- RAPTOR improves **best-layer accuracy** over GCS in **41/42** settings (1 tie).
-- Grid-wide mean accuracy (computed from Table 1):
-  - Best-layer: RAPTOR **87.41** vs GCS **85.45** (+1.96)
-  - Mean-over-layers: RAPTOR **82.08** vs GCS **79.08** (+3.00)
-- Versus xRFM on the same table:
-  - Best-layer: RAPTOR **87.41** vs xRFM **87.12** (+0.29)
-  - Mean-over-layers: RAPTOR **82.08** vs xRFM **82.05** (+0.03)
-
-The paper also reports competitive directional robustness and significantly lower training cost.
-
-## Environment Setup
-
-### 1) Create conda environment
+## Setup
 
 ```bash
 conda env create -f environment.yml
-conda activate kav311
+conda activate raptor
+pip install -e .
 ```
 
-If `environment.yml` contains a machine-specific `prefix`, remove that line before creating the env on a new machine.
-
-### 2) Install xRFM (required for xRFM baseline)
+The xRFM baseline is installed from the commit used by the experiments:
 
 ```bash
 pip install git+https://github.com/dmbeaglehole/xRFM.git@773fae8
 ```
 
-## Data
+For gated Hugging Face models, authenticate outside the repository, for example
+with `huggingface-cli login`. Do not commit tokens or local model caches.
 
-Default datasets used by `run_experiments.py` are defined in `experiment_utils.py`:
+## Data And Embeddings
 
-- `STSA` -> `dataset/stsa.binary.train`
-- `sarcasm` -> `dataset/sarcasm.json`
-- `hatexplain` -> `data/hatexplain`
-- `counterfact` -> `dataset/counterfact.csv`
-- `cities` -> `dataset/cities.csv`
-- `common` -> `dataset/common_claim.csv`
+Default datasets are defined in `src/raptor/core.py`:
 
-Default model list is also in `experiment_utils.py` (`DEFAULT_MODELS`).
+- `STSA`
+- `sarcasm`
+- `hatexplain`
+- `counterfact`
+- `cities`
+- `common`
 
-## Quick Start
+Embeddings are saved as:
 
-### Full benchmark (all default models and datasets)
+```text
+embeddings_all/{model_tag}_{dataset}_embeddings.npz
+```
+
+Each file contains `X_pos_0 ... X_pos_{L-1}` and
+`X_neg_0 ... X_neg_{L-1}`.
+
+Generate embeddings for one setting:
 
 ```bash
-python run_experiments.py \
+python scripts/run_embeddings.py \
+  --models meta-llama/Meta-Llama-3.1-8B-Instruct \
+  --datasets STSA \
+  --model_path . \
+  --cuda 0 \
+  --quant 32
+```
+
+## Probe Benchmark
+
+Run the full default grid:
+
+```bash
+python scripts/run_experiments.py \
   --model_path . \
   --cuda 0 \
   --quant 32 \
-  --noise non-noise \
   --methods xrfm,singlelr,gcs
 ```
 
-### Single model + dataset
+Run methods from existing embeddings:
 
 ```bash
-python run_experiments.py \
-  --models meta-llama/Meta-Llama-3.1-8B-Instruct \
-  --datasets STSA \
-  --methods xrfm,singlelr,gcs \
-  --model_path . \
-  --cuda 0
-```
-
-### Re-run methods without recomputing embeddings
-
-```bash
-python run_experiments.py \
+python scripts/run_experiments.py \
   --skip_embeddings \
   --methods xrfm,singlelr,gcs
 ```
 
-### RAPTOR only (fastest baseline check)
+Run RAPTOR only:
 
 ```bash
-python run_experiments.py \
-  --methods singlelr
+python scripts/run_raptor.py \
+  --models meta-llama/Meta-Llama-3.1-8B-Instruct \
+  --datasets STSA
 ```
 
-## Outputs
+Results are saved under:
 
-### Embeddings
+```text
+exp_results/{model_tag}/{dataset}/
+  splits.npz
+  singlelr_results.npz
+  rfm_results.npz
+  rfm_hparams.json
+  gcs_results.npz
+```
 
-`embeddings_all/{model_tag}_{dataset}_embeddings.npz`
+## Robustness, Timing, And Steering
 
-Contains per-layer positive/negative embeddings:
+Occlusion robustness:
 
-- `X_pos_0 ... X_pos_{L-1}`
-- `X_neg_0 ... X_neg_{L-1}`
+```bash
+python scripts/run_robustness.py \
+  --model meta-llama/Meta-Llama-3.1-8B-Instruct \
+  --dataset STSA \
+  --layer all \
+  --methods singlelr,xrfm,gcs
+```
 
-### Results
+Single-layer cluster task:
 
-`exp_results/{model_tag}/{dataset}/`
+```bash
+python scripts/run_layer_task.py \
+  --model meta-llama/Meta-Llama-3.1-8B-Instruct \
+  --dataset STSA \
+  --layer 10 \
+  --methods singlelr,xrfm,gcs
+```
 
-- `singlelr_results.npz` (RAPTOR)
-- `rfm_results.npz` and `rfm_hparams.json` (xRFM)
-- `gcs_results.npz` (GCS)
-- `splits.npz` (shared split indices)
+Accuracy-structure validation:
 
-## Repository Layout (core)
+```bash
+python scripts/validate_accuracy_structure.py \
+  --emb_npz embeddings_all/meta-llama-Meta-Llama-3.1-8B-Instruct_STSA_embeddings.npz \
+  --layer 10 \
+  --out exp_results/acc_structure/llama8b_stsa_layer10
+```
 
-- `run_experiments.py` - end-to-end pipeline
-- `run_embeddings.py` - embedding generation
-- `run_singlelr.py` - RAPTOR probe training
-- `run_xrfm.py` - xRFM baseline wrapper
-- `run_gcs.py` - GCS baseline wrapper
-- `run_layer_task.py` - per-layer execution helper
-- `experiment_utils.py` - shared configs and utilities
-- `simulate_xrfm.py` - xRFM adapter
-- `probe_sampler.py` - GCS probing sampler
+Activation steering:
+
+```bash
+python scripts/steer.py \
+  --model-id meta-llama/Meta-Llama-3.1-8B-Instruct \
+  --dataset STSA \
+  --vector-kind singlelr \
+  --savepath exp_results
+```
+
+## Adding New Experiments
+
+Add reusable logic under `src/raptor/experiments/` and expose it through a thin
+wrapper in `scripts/`. Keep generated outputs in `exp_results/`,
+`embeddings_all/`, `plots/`, or `logs/`; these paths are ignored by git.
+
+When adding a new probe method, prefer this pattern:
+
+1. Put reusable training code in `src/raptor/probes/{method}.py`.
+2. Put grid orchestration in `src/raptor/experiments/run_{method}.py`.
+3. Save results into `exp_results/{model_tag}/{dataset}/`.
+4. Reuse `load_or_create_splits` from `src/raptor/core.py`.
 
 ## Citation
 
@@ -169,7 +200,9 @@ Contains per-layer positive/negative embeddings:
 }
 ```
 
-## Acknowledgments
+## Notes
 
-- xRFM baseline: https://github.com/dmbeaglehole/xRFM
-- neural controller utilities included in `neural_controllers_repo`
+- This repository should not contain generated embeddings, model weights,
+  experiment logs, API keys, Hugging Face tokens, or local absolute paths.
+- The `origin` remote from the old thesis repository is not used for publishing
+  this cleanup. The intended GitHub target is `git@github.com:Ziqi-Gao/RAPTOR.git`.
