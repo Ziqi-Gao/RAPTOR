@@ -37,8 +37,7 @@ src/raptor/
 scripts/                          Thin command-line wrappers
 scripts/plotting/                 Paper figure helpers
 configs/default.yaml              Default paper grid
-dataset/                          Small benchmark data files
-data/hatexplain/                  Hugging Face dataset loader for HateXplain
+dataset/                          Benchmark data files and HateXplain loader
 ```
 
 The computational logic from the original experiment scripts is preserved; this

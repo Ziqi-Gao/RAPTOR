@@ -41,7 +41,7 @@ ALIAS_DATASETS = {
 DATASET_PATHS = {
     "STSA": str(REPO_ROOT / "dataset" / "stsa.binary.train"),
     "sarcasm": str(REPO_ROOT / "dataset" / "sarcasm.json"),
-    "hatexplain": str(REPO_ROOT / "data" / "hatexplain"),
+    "hatexplain": str(REPO_ROOT / "dataset" / "hatexplain"),
     "counterfact": str(REPO_ROOT / "dataset" / "counterfact.csv"),
     "cities": str(REPO_ROOT / "dataset" / "cities.csv"),
     "common": str(REPO_ROOT / "dataset" / "common_claim.csv"),
