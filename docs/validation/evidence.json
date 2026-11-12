@@ -208,14 +208,15 @@
     "paid judge/API calls",
     "Slurm submission/modification/cancellation",
     "GPU validation",
-    "Python3.11 CI execution"
+    "local Python 3.11 test execution",
+    "fresh TeX compilation"
   ],
   "remaining_limits": [
     "Author-code software license deferred by owner; pending notice is not an open-source license grant.",
-    "Owner-designated local final ZIP inaccessible; public arXiv v4 used, without claiming byte identity.",
     "Some raw dataset redistribution terms unresolved; benchmark text not republished.",
     "Published five-method timing has mixed historical sources; author hardware confirmation does not replace missing original logs.",
-    "Historical exact robustness perturbation pairing, old steering trajectories, judge raw-score provenance and some appendix producer bindings remain unverified."
+    "Historical exact robustness perturbation pairing, old steering trajectories, judge raw-score provenance and some appendix producer bindings remain unverified.",
+    "No fresh TeX compilation was performed; source identity, static references and numeric/figure inputs were checked."
   ],
   "private_evidence_digests": [
     {
@@ -278,5 +279,45 @@
       "label": "final_installed_wheel_timing_canary",
       "sha256": "b8057d83488d22670b2b28c6f99b3493148f5c10d34f9385ca16ee1d3e034cc9"
     }
-  ]
+  ],
+  "manuscript_recheck": {
+    "identity_manifest": "manuscript_identity.json",
+    "identity_manifest_sha256": "fca762a0eed16a80f14154651a223fafb95a2f04bbb22fbdbc8b371f2603ab41",
+    "uploaded_zip_sha256": "2a1a6ad2a02886f10048b3ab1580d63604bb29ca9bbcd0136902069da21dc2d5",
+    "uploaded_files": 66,
+    "active_files": 12,
+    "active_inputs_byte_identical_to_public_v4": true,
+    "whole_archives_identical": false,
+    "inactive_uploaded_files": 54,
+    "labels_checked": 93,
+    "missing_local_inputs": 0,
+    "unresolved_references": 0,
+    "duplicate_labels": 0,
+    "bibliography_entries": 99,
+    "distinct_cited_keys": 36,
+    "missing_cited_keys": 0,
+    "duplicate_bibliography_keys": 0,
+    "accuracy_grouped_robustness_values_checked": 1618,
+    "values_outside_rounding_precision": 0,
+    "timing_setting_circles_checked": 180,
+    "timing_median_diamonds_checked": 5,
+    "accuracy_heatmap_colors_checked": 288,
+    "robustness_figure_points_checked": 180,
+    "robustness_figure_median_diamonds_checked": 10,
+    "layerwise_curves_checked": 180,
+    "layerwise_mean_values_shape_checked": 8040,
+    "layerwise_seed_means_independently_recomputed": false,
+    "fresh_tex_compilation": false,
+    "new_experiment_run": false,
+    "scientific_package_source_changed": false,
+    "historical_evidence_gaps_resolved_by_receiving_manuscript": false
+  },
+  "remote_ci": {
+    "commit": "3184a978563c516678e223f87c32849a267870b1",
+    "run": "https://github.com/Ziqi-Gao/RAPTOR/actions/runs/43231370620",
+    "status": "completed",
+    "conclusion": "success",
+    "python": "3.11",
+    "scope": "Verified prior release commit; does not assert CI for this subsequent documentation update."
+  }
 }

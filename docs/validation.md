@@ -38,8 +38,12 @@ scikit-learn 1.6.1, pandas 2.2.3, threadpoolctl 3.6.0, xRFM 0.4.3,
 PyTorch distribution 2.8.0 (actual runtime `2.8.0+cu128`), Transformers 4.45.0,
 Datasets 3.5.0 and Matplotlib 3.9.4. Timing used an Intel Xeon Platinum 8592+
 CPU, one affinity CPU and one effective Torch/native-pool thread. The installed
-Torch build supports CUDA 12.8; these checks executed on CPU. Python 3.11 is the
-CI configuration, not a locally completed CI run. A command-scoped C++ runtime
+Torch build supports CUDA 12.8; these local checks executed on CPU with Python
+3.9.21. [GitHub Actions](https://github.com/Ziqi-Gao/RAPTOR/actions/runs/43231370620)
+completed successfully with Python 3.11 for commit
+`3184a978563c516678e223f87c32849a267870b1`. This records the prior commit's CI;
+local Python 3.11 tests and CI for this later documentation update are not claimed.
+A command-scoped C++ runtime
 search-path correction was needed for a local embedding CLI check; no global
 loader configuration changed. The declared Python range is
 3.9–3.12, reflecting the pinned numerical dependencies.
@@ -83,6 +87,35 @@ its own content and split-identity checks.
 | Five-method timing | 8,040 layer–seed tasks; 40,200 method observations |
 | Directional robustness | 18 settings, 768 layers per method, 3,840 layer–method tasks, 76,800 directions and 729,600 cosine pairs |
 
+## Final manuscript recheck
+
+The author-supplied final TeX ZIP has SHA256
+`2a1a6ad2a02886f10048b3ab1580d63604bb29ca9bbcd0136902069da21dc2d5`.
+All 12 active inputs among its 66 files match the audited v4 files byte for byte;
+54 files are inactive. Static checks found 93 labels without duplicates or
+unresolved references, and 99 bibliography entries with 36 distinct cited keys,
+no missing cited keys and no duplicate bibliography keys. This checks source
+inputs and static references, not a new compilation or typesetting certificate.
+
+The read-only numeric recheck compared **1,618 displayed values**: 420 compact
+main accuracy entries, 840 appendix accuracy means/SDs, 168 grouped sensitivity
+means/SDs and 190 robustness statistics. All agree within their declared rounding
+precision; six float-format boundary cases are exactly half a displayed unit.
+All 288 accuracy heatmap colors and the robustness PDF's 180 points and ten
+median diamonds match the released numeric references. Layerwise figure checks
+cover layout, complete ranges and 180 curves (8,040 values); their raw seed means
+were not independently regenerated. The timing PDF's 180 setting circles and five
+median diamonds also match the
+released mixed-source reference within PDF-coordinate precision (maximum
+relative point deviation about `2.22e-6`). These checks confirm the printed
+inputs, not historical resource equivalence or a newly matched timing run.
+
+[manuscript_audit.md](manuscript_audit.md) records exact manuscript locations,
+methods and preserved limitations. [validation/manuscript_identity.json](validation/manuscript_identity.json)
+contains the active-input hashes, counts and compact numeric results. No
+scientific source, result, manuscript or figure was changed for this recheck;
+no fitting, generation, judging, extraction or cluster work was performed.
+
 ## Provided workflows and remaining limits
 
 The repository provides fresh prepare/run/resume/aggregate/plot commands for the
@@ -94,9 +127,10 @@ GPU validation or cluster submission/modification/cancellation was performed.
 
 The owner deferred the author-code software license: [LICENSE](../LICENSE) is a
 pending-status notice, not an open-source grant. Some dataset redistribution terms
-remain unresolved, so raw benchmark text is withheld. The owner-designated local
-final ZIP was inaccessible; the public camera-ready arXiv v4 was audited without
-claiming byte identity with that ZIP.
+remain unresolved, so raw benchmark text is withheld. The author has now supplied
+the final TeX ZIP. Its 12 active inputs match the audited public v4 files byte for
+byte; its 54 inactive files do not enter the document. The archives themselves
+are different. No fresh TeX compilation was performed.
 
 Historical scientific limits remain as documented in [provenance.md](provenance.md):
 the reported five-method timing figure mixes sources, original three-method

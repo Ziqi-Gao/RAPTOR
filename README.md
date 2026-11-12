@@ -171,7 +171,10 @@ provided but not fully run, and unresolved historical provenance.
 This release did **not** run a full benchmark, extract large-model activations,
 generate text, call a paid judge, or submit/change Slurm jobs. It does not claim
 that the reorganized code has newly reproduced every paper number. The public
-v4 was fully available for audit; the owner's local ZIP was not accessible here.
+v4 and the owner-supplied final TeX ZIP were both inspected. All 12 active
+manuscript inputs match v4 byte for byte; the archives themselves differ. The
+[manuscript audit](docs/manuscript_audit.md) records the attachment hash, static
+reference checks and numeric comparisons. No fresh TeX compilation was performed.
 
 ## License and citation
 
