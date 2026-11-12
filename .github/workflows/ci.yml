@@ -1,0 +1,28 @@
+name: offline-protocol-checks
+on:
+  push:
+  pull_request:
+permissions:
+  contents: read
+jobs:
+  protocols:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    env:
+      CUDA_VISIBLE_DEVICES: ""
+      HF_HUB_OFFLINE: "1"
+      TRANSFORMERS_OFFLINE: "1"
+      MPLBACKEND: Agg
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+          cache: pip
+      - run: python -m pip install --upgrade pip setuptools wheel
+      - run: python -m pip install torch==2.8.0 --index-url https://download.pytorch.org/whl/cpu
+      - run: python -m pip install -e '.[xrfm,extract,plots,test]'
+      - run: python -m pytest -q
+      - run: python scripts/run_timing.py canary --output /tmp/raptor-ci-canary
+      - run: python scripts/recompute_reported.py --output /tmp/reported_recomputed.json
+      - run: python -m build --wheel

@@ -1,0 +1,386 @@
+{
+  "schema": "raptor.manuscript_identity.v1",
+  "audit_date": "2026-11-12",
+  "reviewed_release_commit": "3184a978563c516678e223f87c32849a267870b1",
+  "uploaded_archive": {
+    "label": "author-supplied final TeX ZIP",
+    "sha256": "2a1a6ad2a02886f10048b3ab1580d63604bb29ca9bbcd0136902069da21dc2d5",
+    "file_count": 66
+  },
+  "public_reference": {
+    "paper": "https://arxiv.org/abs/2602.00158v4",
+    "source_archive_sha256": "b291d354a0ed0ef6ffc26186db7cd8f07ce0e190b219a44f2c484a0e64b46cb1",
+    "archive_bytes_identical": false,
+    "comparison_scope": "all active manuscript inputs; not the whole archives"
+  },
+  "active_document": {
+    "root": "main.tex",
+    "active_file_count": 12,
+    "all_active_inputs_byte_identical": true,
+    "inactive_uploaded_file_count": 54,
+    "active_files": {
+      "main.tex": {
+        "sha256": "7ff8c049484f07fb3539f50002c1460886009c0bea6ace63984cf6ff81ffe8de",
+        "identical_to_public_v4": true
+      },
+      "main_ralop_v2.pdf": {
+        "sha256": "6f48a23eb7135e06b6fb92662e217183e9c4d609d390dadf8cc7e68295922957",
+        "identical_to_public_v4": true
+      },
+      "raptor_accuracy_differences_5seeds.pdf": {
+        "sha256": "db2408240ea9cc68b45425b406515a47a2887817d0eeeb70e1e85a7c758183a7",
+        "identical_to_public_v4": true
+      },
+      "robustness_max_mean_distribution_2x1.pdf": {
+        "sha256": "d2769b79f673d7b660d0a4ed449e96b6cd31f8f4e49d7731b94268feab2c135d",
+        "identical_to_public_v4": true
+      },
+      "runtime_distribution_5methods_preview.pdf": {
+        "sha256": "652d9690fcd9f54f7cafd227defe69d32de6f589a8c3c939f20eccb95c0553b4",
+        "identical_to_public_v4": true
+      },
+      "layerwise_accuracy_part1_5seeds.pdf": {
+        "sha256": "dbb89532488a3aa1a0ac29979ad599539277a662917ad46589c84f99b923bce7",
+        "identical_to_public_v4": true
+      },
+      "layerwise_accuracy_part2_5seeds.pdf": {
+        "sha256": "5223cf27f27d56d1d1401641e0ad82f18b058300b16d788524ff9774665efa4a",
+        "identical_to_public_v4": true
+      },
+      "refs.bib": {
+        "sha256": "2a2c06a03e49e2de9769aabdba0a86ec9e2a5bc471efcbc4c096487db6188a64",
+        "identical_to_public_v4": true
+      },
+      "neurips_2026.sty": {
+        "sha256": "e6b1e7f8a791495557b03fda215da874fdd3fa55e70905e80af752fb2136dddf",
+        "identical_to_public_v4": true
+      },
+      "checklist.tex": {
+        "sha256": "b3652e5c16612588cd26404a39eace04400efb2e77a719830d1f9156f10e323c",
+        "identical_to_public_v4": true
+      },
+      "robustness_full.tex": {
+        "sha256": "c98887811bf9014061ab5877d58afde8c61767c9bf4ca196410f6335ba0a526b",
+        "identical_to_public_v4": true
+      },
+      "accuracy_five_seed_full.tex": {
+        "sha256": "ed3246eceb0f4bfdb6eb557563a61b760c9f93d66de06ba1b8a0590697c1ac82",
+        "identical_to_public_v4": true
+      }
+    },
+    "dependencies": [
+      {
+        "parent": "main.tex",
+        "command": "input",
+        "file": "accuracy_five_seed_full.tex",
+        "line": 2273
+      },
+      {
+        "parent": "main.tex",
+        "command": "input",
+        "file": "robustness_full.tex",
+        "line": 2274
+      },
+      {
+        "parent": "main.tex",
+        "command": "input",
+        "file": "checklist.tex",
+        "line": 2391
+      },
+      {
+        "parent": "main.tex",
+        "command": "includegraphics",
+        "file": "main_ralop_v2.pdf",
+        "line": 166
+      },
+      {
+        "parent": "main.tex",
+        "command": "includegraphics",
+        "file": "raptor_accuracy_differences_5seeds.pdf",
+        "line": 603
+      },
+      {
+        "parent": "main.tex",
+        "command": "includegraphics",
+        "file": "robustness_max_mean_distribution_2x1.pdf",
+        "line": 636
+      },
+      {
+        "parent": "main.tex",
+        "command": "includegraphics",
+        "file": "runtime_distribution_5methods_preview.pdf",
+        "line": 692
+      },
+      {
+        "parent": "main.tex",
+        "command": "includegraphics",
+        "file": "layerwise_accuracy_part1_5seeds.pdf",
+        "line": 2259
+      },
+      {
+        "parent": "main.tex",
+        "command": "includegraphics",
+        "file": "layerwise_accuracy_part2_5seeds.pdf",
+        "line": 2268
+      },
+      {
+        "parent": "main.tex",
+        "command": "bibliography",
+        "file": "refs.bib",
+        "line": 1007
+      },
+      {
+        "parent": "main.tex",
+        "command": "usepackage",
+        "file": "neurips_2026.sty",
+        "line": 8
+      }
+    ],
+    "inactive_assets_do_not_expand_scope": true
+  },
+  "static_checks": {
+    "fresh_tex_compilation_performed": false,
+    "missing_local_inputs": [],
+    "label_count": 93,
+    "duplicate_labels": [],
+    "unresolved_references": [],
+    "bibliography_entries": 99,
+    "distinct_cited_keys": 36,
+    "missing_cited_keys": [],
+    "duplicate_bibliography_keys": []
+  },
+  "numeric_checks": {
+    "accuracy_grouped_robustness": {
+      "displayed_values_checked": 1618,
+      "counts_by_kind": {
+        "accuracy_appendix_mean": 420,
+        "accuracy_appendix_sd": 420,
+        "accuracy_main": 420,
+        "grouped_mean": 84,
+        "grouped_sd": 84,
+        "robustness": 190
+      },
+      "outside_declared_rounding_precision": 0,
+      "float_format_half_unit_boundary_cases": 6,
+      "main_accuracy_highlight_mismatches": 0,
+      "primary_seed_rows_recomputed": 900,
+      "primary_summaries_including_dataset_means_recomputed": 420,
+      "primary_paired_comparisons_recomputed": 288
+    },
+    "accuracy_heatmap": {
+      "cells": 288,
+      "matched_expected_colors": 288,
+      "normalization_bound_percentage_points": 15.0,
+      "max_rgb_channel_error": 3.0152937924299295e-08,
+      "mismatches": []
+    },
+    "robustness_figure": {
+      "point_count": 180,
+      "diamond_count": 10,
+      "rows": [
+        {
+          "method": "raptor",
+          "statistic": "max",
+          "circles": 18,
+          "maximum_absolute_csv_deviation": 5.501952649034081e-08,
+          "CSV_median": 0.9999876914130044,
+          "PDF_diamond": 0.9999876870589168
+        },
+        {
+          "method": "raptor",
+          "statistic": "mean",
+          "circles": 18,
+          "maximum_absolute_csv_deviation": 6.054693546531098e-08,
+          "CSV_median": 0.895030013922308,
+          "PDF_diamond": 0.8950300201220065
+        },
+        {
+          "method": "xrfm",
+          "statistic": "max",
+          "circles": 18,
+          "maximum_absolute_csv_deviation": 3.322723651777437e-08,
+          "CSV_median": 0.8112541898152128,
+          "PDF_diamond": 0.8112541922407928
+        },
+        {
+          "method": "xrfm",
+          "statistic": "mean",
+          "circles": 18,
+          "maximum_absolute_csv_deviation": 1.789727333001423e-08,
+          "CSV_median": 0.699052610895968,
+          "PDF_diamond": 0.699052617834951
+        },
+        {
+          "method": "gcs",
+          "statistic": "max",
+          "circles": 18,
+          "maximum_absolute_csv_deviation": 4.57712985291181e-08,
+          "CSV_median": 0.9999963309330415,
+          "PDF_diamond": 0.999996332967843
+        },
+        {
+          "method": "gcs",
+          "statistic": "mean",
+          "circles": 18,
+          "maximum_absolute_csv_deviation": 1.95628394594749e-08,
+          "CSV_median": 0.9484857466933229,
+          "PDF_diamond": 0.9484857438554517
+        },
+        {
+          "method": "fixed_reg",
+          "statistic": "max",
+          "circles": 18,
+          "maximum_absolute_csv_deviation": 6.601170521314259e-08,
+          "CSV_median": 0.9999627316595423,
+          "PDF_diamond": 0.9999627414856223
+        },
+        {
+          "method": "fixed_reg",
+          "statistic": "mean",
+          "circles": 18,
+          "maximum_absolute_csv_deviation": 5.109183276452711e-08,
+          "CSV_median": 0.8127471136494118,
+          "PDF_diamond": 0.8127471174777757
+        },
+        {
+          "method": "caa",
+          "statistic": "max",
+          "circles": 18,
+          "maximum_absolute_csv_deviation": 4.601749858945681e-08,
+          "CSV_median": 0.9970369208239609,
+          "PDF_diamond": 0.9970369162973967
+        },
+        {
+          "method": "caa",
+          "statistic": "mean",
+          "circles": 18,
+          "maximum_absolute_csv_deviation": 5.960189397580251e-08,
+          "CSV_median": 0.9885091739659237,
+          "PDF_diamond": 0.9885091799380896
+        }
+      ],
+      "axis": "horizontal linear absolute cosine; ticks0.60 to1.00; topMax/bottomMean"
+    },
+    "layerwise_figures": {
+      "figures": [
+        {
+          "file": "layerwise_accuracy_part1_5seeds.pdf",
+          "panels": 18,
+          "curves": 90,
+          "curve_point_count": 4020,
+          "curve_lengths": {
+            "80": 15,
+            "32": 15,
+            "28": 30,
+            "64": 15,
+            "36": 15
+          },
+          "method_colors": 5,
+          "x_indexing": "stored zero-based layer index",
+          "y_axis": "test accuracy fraction",
+          "full_layer_sets_confirmed": true
+        },
+        {
+          "file": "layerwise_accuracy_part2_5seeds.pdf",
+          "panels": 18,
+          "curves": 90,
+          "curve_point_count": 4020,
+          "curve_lengths": {
+            "80": 15,
+            "32": 15,
+            "28": 30,
+            "64": 15,
+            "36": 15
+          },
+          "method_colors": 5,
+          "x_indexing": "stored zero-based layer index",
+          "y_axis": "test accuracy fraction",
+          "full_layer_sets_confirmed": true
+        }
+      ],
+      "total_setting_panels": 36,
+      "total_method_curves": 180,
+      "total_mean_layer_values": 8040,
+      "raw_seed_layer_values_independently_recomputed": false
+    },
+    "timing_figure": {
+      "file": "runtime_distribution_5methods_preview.pdf",
+      "setting_circles_checked": 180,
+      "median_diamonds_checked": 5,
+      "maximum_relative_point_deviation": 2.215199947565938e-06,
+      "median_seconds_from_reference": {
+        "singlelr": 20.480031534340167,
+        "xrfm": 98.79318093466355,
+        "gcs": 110.43997916033547,
+        "fixed_reg": 8.8333318099,
+        "dim_midpoint": 0.26893072895000003
+      },
+      "provenance": "mixed historical sources; does not establish matched hardware or clock boundaries"
+    }
+  },
+  "adopted_scope": {
+    "accuracy": "six models; six datasets; five methods; outer seeds 42-46",
+    "grouped_sensitivity": "six models; CounterFact/subject and Cities/city; three methods; five seeds",
+    "robustness": "three models; six datasets; five methods; 768 layers per method; K=20; 20 percent drops",
+    "steering_judge": "original controllability and Original/GCS/RAPTOR four-metric 1-10 judge",
+    "later_calibrated_generation_and_six_metric_judge": "optional; not adopted in final manuscript",
+    "numerical_theory_solver": "no separate numerical-theory experiment in active manuscript"
+  },
+  "execution_scope": {
+    "read_only_inspection_and_arithmetic": true,
+    "scientific_code_changed": false,
+    "manuscript_or_figure_changed": false,
+    "new_experiment_run": false,
+    "full_benchmark_rerun": false,
+    "fresh_tex_compilation": false
+  },
+  "remaining_limits": [
+    "Author-code license remains deferred; no open-source grant is implied.",
+    "Some raw dataset redistribution terms remain unresolved.",
+    "Mixed historical timing does not certify common original resources, clocks or seed aggregation.",
+    "Original steering control trajectories and four-metric judge raw-score provenance remain unverified.",
+    "Separability all-cache computation differs from the printed training-set description; producer/subset unbound.",
+    "Structure legacy p/n differs from printed n/p; the paper caption lambda=1/C conflicts with its mean-loss objective and native normalized lambda=1/(n*C); historical flags remain unbound.",
+    "Fixed-p sample sweeps do not independently distinguish dependence on n/p from dependence on n.",
+    "The analytic derivation retains cited optimizer-convergence assumptions; stylized stability is not a guarantee for overlapping ablations.",
+    "Printed raw affine-logit steering differs from known legacy_unit unit-direction/zero-bias behavior; historical control producer remains unbound."
+  ],
+  "private_evidence_sha256": [
+    {
+      "label": "active_graph.json",
+      "sha256": "b32faab179609208f20c4857d589596fa01964964c9572d9188db526187117ec"
+    },
+    {
+      "label": "file_comparison.json",
+      "sha256": "f64c6bee68bb5ad1af6a5bc58924cbc778c8064f9de593fdc0693ff040fd8469"
+    },
+    {
+      "label": "citation_check.json",
+      "sha256": "cfaba0b43e48a9f5431876c3221bcaf41adc5d58ce80ab944b6815a779d33b75"
+    },
+    {
+      "label": "accuracy_robustness_numeric.json",
+      "sha256": "fc9e18ba6cad1a7038f178e1739263ac0ee6b492b8a43005af0619a324671ff4"
+    },
+    {
+      "label": "timing_vector_check.json",
+      "sha256": "bdd780fbd51c463cbc271cf36e3614268d57323dfd41e20c60cefa4eb623964c"
+    },
+    {
+      "label": "timing_reported_comparisons.json",
+      "sha256": "db8d4def9716a56c030b3c3d72fda12bffd28a866c8d9fff09b03e09acd44802"
+    },
+    {
+      "label": "accuracy_heatmap_vector_check.json",
+      "sha256": "95e4b2f16a83fd6103e9be46a8171a65d39f5c7cdfb217cc1c668d4995cb1168"
+    },
+    {
+      "label": "robustness_vector_check.json",
+      "sha256": "c86d742c837c5e5353c42ac710ac38495c51792d55e8f22e51b92547aeb00411"
+    },
+    {
+      "label": "layerwise_shape_check.json",
+      "sha256": "61a4bf4b98b5f6786d45826dc18ddbf0020fac0417b3259f346dda3014206925"
+    }
+  ]
+}

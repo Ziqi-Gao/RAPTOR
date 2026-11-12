@@ -1,0 +1,10 @@
+{
+  "model": "Qwen/Qwen2.5-7B-Instruct",
+  "dataset": "STSA",
+  "method": "singlelr",
+  "split_sha256": "REPLACE_WITH_CURRENT_SPLIT_IDENTITY",
+  "embedding_sha256": "REPLACE_WITH_CURRENT_EMBEDDING_SHA256",
+  "activation_site": "transformer_block_output",
+  "coordinate_evidence": "REPLACE_WITH_YOUR_EXTRACTION_SITE_AND_MODEL_REVISION_CHECK",
+  "reliability": {"enabled": false, "threshold": 0, "comparison": ">="}
+}

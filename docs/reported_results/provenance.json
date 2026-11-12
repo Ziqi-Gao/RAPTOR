@@ -1,0 +1,13 @@
+{
+  "source": "https://arxiv.org/html/2602.00158v4",
+  "source_version": "arXiv2602.00158v4 published2026-11-07",
+  "source_tar_sha256": "b291d354a0ed0ef6ffc26186db7cd8f07ce0e190b219a44f2c484a0e64b46cb1",
+  "main_tex_sha256": "7ff8c049484f07fb3539f50002c1460886009c0bea6ace63984cf6ff81ffe8de",
+  "kind": "published_reported_values_not_new_run",
+  "tables": {
+    "steering_controls.csv": "Table2/B.5",
+    "paper_external_judge.csv": "B.8Table7"
+  },
+  "old_raw_control_trajectories_available": false,
+  "old_raw_judge_scores_verified": false
+}

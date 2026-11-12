@@ -1,0 +1,18 @@
+# Full native five-method computational-cost protocol. No historical inputs.
+models:
+  - google/gemma-7b-it
+  - meta-llama/Meta-Llama-3.1-8B-Instruct
+  - meta-llama/Meta-Llama-3.1-70B-Instruct
+  - Qwen/Qwen2.5-3B-Instruct
+  - Qwen/Qwen2.5-7B-Instruct
+  - Qwen/Qwen2.5-32B-Instruct
+datasets: [STSA, sarcasm, hatexplain, counterfact, cities, common]
+seeds: [42, 43, 44, 45, 46]
+layer_counts:
+  google/gemma-7b-it: 28
+  meta-llama/Meta-Llama-3.1-8B-Instruct: 32
+  meta-llama/Meta-Llama-3.1-70B-Instruct: 80
+  Qwen/Qwen2.5-3B-Instruct: 36
+  Qwen/Qwen2.5-7B-Instruct: 28
+  Qwen/Qwen2.5-32B-Instruct: 64
+resources: {backend: cpu, threads: 1, affinity_cpus: 1}

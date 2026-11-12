@@ -25,7 +25,7 @@ class ProbingConfig:
     random_state: int | None = None
 
 
-def run_probing(X_layers, y_pool, cfg: ProbingConfig, *, X_layers_holdout, y_holdout):
+def run_probing(X_layers, y_pool, cfg: ProbingConfig, *, X_layers_holdout, y_holdout, diagnostics=None):
     if X_layers_holdout is None or y_holdout is None:
         raise ValueError("X_layers_holdout and y_holdout are required.")
 
@@ -67,6 +67,7 @@ def run_probing(X_layers, y_pool, cfg: ProbingConfig, *, X_layers_holdout, y_hol
             idx_rel,
             test_size=cfg.val_frac,
             shuffle=True,
+            random_state=int(rng.integers(0, 2**31 - 1)),
         )
         tr_idx_pool = idx_sub[idx_tr_rel]
         val_idx_pool = idx_sub[idx_val_rel]
@@ -98,7 +99,7 @@ def run_probing(X_layers, y_pool, cfg: ProbingConfig, *, X_layers_holdout, y_hol
             best_b_raw = None
             best_hold_acc = 0.0
 
-            for _ in range(cfg.early_loops):
+            for retry_index in range(cfg.early_loops):
                 clf = LogisticRegression(
                     penalty="l2",
                     solver="lbfgs",
@@ -124,6 +125,11 @@ def run_probing(X_layers, y_pool, cfg: ProbingConfig, *, X_layers_holdout, y_hol
 
                 n_iter = clf.n_iter_
                 n_iter = max(n_iter) if isinstance(n_iter, (list, np.ndarray)) else n_iter
+                if diagnostics is not None:
+                    diagnostics.append({"sample": int(it), "layer": int(layer), "attempt": int(retry_index),
+                                        "n_iter": int(n_iter), "max_iter": int(cfg.max_iter_lr),
+                                        "iteration_limit_hit": bool(int(n_iter) >= cfg.max_iter_lr),
+                                        "internal_validation_threshold_passed": bool(val_acc > cfg.val_thresh)})
                 if int(n_iter) < cfg.max_iter_lr or val_acc > cfg.val_thresh:
                     break
 

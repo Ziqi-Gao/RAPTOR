@@ -76,6 +76,7 @@ def _run_gcs_all_layers(
     gcs_bootstrap: bool,
     gcs_stratified: bool,
     gcs_sample_n: int,
+    diagnostics=None,
 ) -> Dict[str, Any]:
     X_layers_train = [X[train_idx] for X in X_layers]
     y_train = y[train_idx]
@@ -101,6 +102,7 @@ def _run_gcs_all_layers(
         probe_cfg,
         X_layers_holdout=X_layers_test,
         y_holdout=y_test,
+        diagnostics=diagnostics,
     )
 
     L = len(X_layers)

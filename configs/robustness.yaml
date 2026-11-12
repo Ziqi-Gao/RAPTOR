@@ -1,0 +1,16 @@
+# Formal native protocol; CLI defaults match this declarative reference.
+models:
+  - google/gemma-7b-it
+  - Qwen/Qwen2.5-3B-Instruct
+  - Qwen/Qwen2.5-32B-Instruct
+datasets: [STSA, sarcasm, hatexplain, counterfact, cities, common]
+methods: [singlelr, xrfm, gcs, fixed_reg, caa]
+seed: 42
+runs_per_layer: 20
+drop_fraction: 0.2
+test_size: 0.2
+validation_size_within_retained_pool: 0.2
+absolute_cosine: true
+intercept_in_direction: false
+coordinate_policy: method_native
+# xRFM remains standardized-space AGOP; other methods use raw directions.

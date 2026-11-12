@@ -1,25 +1,10 @@
 name: raptor
 channels:
-  - pytorch
-  - nvidia
   - conda-forge
 dependencies:
   - python=3.11
   - pip
-  - numpy
-  - scipy
-  - pandas
-  - scikit-learn
-  - matplotlib
-  - tqdm
-  - pytorch
-  - pytorch-cuda=12.1
   - pip:
-      - accelerate
-      - baukit
-      - datasets
-      - openai
-      - sentencepiece
-      - transformers
-      - bitsandbytes
-      - git+https://github.com/dmbeaglehole/xRFM.git@773fae8
+      - -e .[xrfm,extract,plots,test]
+# CPU execution is supported. Install a PyTorch wheel appropriate for your CUDA
+# driver before GPU extraction; quantized models additionally require .[quant].

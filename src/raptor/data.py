@@ -5,9 +5,10 @@ from pathlib import Path
 from typing import Optional, Tuple
 
 import pandas as pd
-from datasets import load_dataset
+import numpy as np
 
-from raptor.model_utils import add_noise
+def add_noise(question: str) -> str:
+    return chr(int(np.random.choice(a=2)) + 97) * 3 + question
 
 
 class DataProcessing:
@@ -76,10 +77,30 @@ class DataProcessing:
         pos_labels = {0, 2}  # hatespeech and offensive are positive.
         label_map = {"hatespeech": 0, "normal": 1, "offensive": 2}
 
-        if self.data_path and self.data_path.is_dir():
-            ds = load_dataset(str(self.data_path), split="train")
+        raw_data = self.data_path / "dataset.json"
+        divisions = self.data_path / "post_id_divisions.json"
+        if raw_data.is_file() and divisions.is_file():
+            # Same ordered train IDs as the historical Hugging Face builder.
+            records = json.loads(raw_data.read_text(encoding="utf-8"))
+            train_ids = json.loads(divisions.read_text(encoding="utf-8"))["train"]
+            ds = [records[key] for key in train_ids]
+        elif self.data_path and self.data_path.is_dir():
+            from datasets import load_dataset
+            # This repository vendors and reviews the local HateXplain builder.
+            # Recent `datasets` releases require explicit consent before running
+            # even a local dataset script.
+            ds = load_dataset(
+                str(self.data_path),
+                split="train",
+                trust_remote_code=True,
+            )
         else:
-            ds = load_dataset("hatexplain", split="train")
+            from datasets import load_dataset
+            ds = load_dataset(
+                "hatexplain",
+                split="train",
+                trust_remote_code=True,
+            )
 
         pos, neg = [], []
         for row in ds:

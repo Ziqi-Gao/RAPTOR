@@ -5,6 +5,7 @@ Adapter around the xRFM probe implementation.
 The callable interface mirrors simulate_singleLR.run_single_lr and
 accepts (X_train, y_train, X_test, y_test).
 """
+
 from __future__ import annotations
 
 import json
@@ -20,11 +21,51 @@ from sklearn.preprocessing import StandardScaler
 
 try:
     import torch
-    from xrfm import RFM
+    from xrfm import RFM as _BaseRFM
+    from xrfm.rfm_src.kernels import (
+        KermacLpqLaplaceKernel,
+        KermacProductLaplaceKernel,
+        LaplaceKernel,
+        LightLaplaceKernel,
+    )
 except ImportError as e:  # pragma: no cover - raised when deps are unavailable
     raise ImportError(
         "xRFM baseline requires `pip install git+https://github.com/dmbeaglehole/xRFM.git@773fae8`."
     ) from e
+
+
+_LIGHT_KERNEL_TYPES = (
+    LaplaceKernel,
+    LightLaplaceKernel,
+    KermacLpqLaplaceKernel,
+    KermacProductLaplaceKernel,
+)
+
+
+class _CompatibleRFM(_BaseRFM):
+    """Work around xRFM 0.4.3's invalid isinstance(..., typing.Union)."""
+
+    def _compute_optimal_M_batch(
+        self,
+        n,
+        c,
+        d,
+        scalar_size=4,
+        mem_constant=2.0,
+        max_batch_size=10_000,
+        max_cheap_batch_size=10_000,
+        light_kernels=_LIGHT_KERNEL_TYPES,
+    ):
+        return super()._compute_optimal_M_batch(
+            n,
+            c,
+            d,
+            scalar_size=scalar_size,
+            mem_constant=mem_constant,
+            max_batch_size=max_batch_size,
+            max_cheap_batch_size=max_cheap_batch_size,
+            light_kernels=light_kernels,
+        )
 
 
 def _to_label_tensor(y: np.ndarray, device: torch.device) -> torch.Tensor:
@@ -88,7 +129,7 @@ def _train_rfm_like_repo(
     search_space: Dict[str, Any],
     tuning_metric: str,
     device_str: str,
-) -> Tuple[RFM, float, Dict[str, Any], torch.Tensor]:
+) -> Tuple[_BaseRFM, float, Dict[str, Any], torch.Tensor]:
     """
     Run the neural_controllers-style xRFM search and pick the best model
     by validation metric.
@@ -104,7 +145,7 @@ def _train_rfm_like_repo(
 
     maximize_metric = tuning_metric in {"f1", "auc", "acc", "top_agop_vectors_ols_auc"}
     best_score = float("-inf") if maximize_metric else float("inf")
-    best_model: Optional[RFM] = None
+    best_model: Optional[_BaseRFM] = None
     best_params: Dict[str, Any] = {}
     best_concept_vector: Optional[torch.Tensor] = None
     caught_errors = []
@@ -131,7 +172,7 @@ def _train_rfm_like_repo(
                             "top_k": int(max(1, hyperparams["n_components"])),
                         },
                     }
-                    model = RFM(**rfm_params["model"], device=device_str)
+                    model = _CompatibleRFM(**rfm_params["model"], device=device_str)
                     model.fit((train_X, train_y), (val_X, val_y), **rfm_params["fit"])
 
                     if tuning_metric == "top_agop_vectors_ols_auc":
@@ -146,7 +187,9 @@ def _train_rfm_like_repo(
                         XtX = projections.T @ projections
                         Xty = projections.T @ targets
                         betas = torch.linalg.pinv(XtX) @ Xty
-                        preds = torch.sigmoid(projections @ betas).reshape(targets.shape)
+                        preds = torch.sigmoid(projections @ betas).reshape(
+                            targets.shape
+                        )
                         val_score = roc_auc_score(
                             targets.detach().cpu().numpy(), preds.detach().cpu().numpy()
                         )
@@ -158,7 +201,11 @@ def _train_rfm_like_repo(
                     if val_score is None:
                         continue
 
-                    is_better = (val_score > best_score) if maximize_metric else (val_score < best_score)
+                    is_better = (
+                        (val_score > best_score)
+                        if maximize_metric
+                        else (val_score < best_score)
+                    )
                     if is_better or best_model is None:
                         best_score = float(val_score)
                         best_model = deepcopy(model)
@@ -172,6 +219,7 @@ def _train_rfm_like_repo(
                         }
                 except Exception:
                     import traceback
+
                     caught_errors.append(traceback.format_exc())
                     continue
 
@@ -193,24 +241,26 @@ def run_xrfm(
     X_test: np.ndarray,
     y_test: np.ndarray,
     *,
-    solver: str = "lbfgs",        # Placeholder for singleLR API compatibility.
-    max_iter: int = 1000,         # Placeholder; may be overridden by rfm_iters.
-    C: float = 1.0,               # Placeholder for singleLR API compatibility.
-    penalty: str = "l2",          # Placeholder for singleLR API compatibility.
-    n_jobs: Optional[int] = None, # Placeholder for singleLR API compatibility.
+    X_val: Optional[np.ndarray] = None,
+    y_val: Optional[np.ndarray] = None,
+    solver: str = "lbfgs",  # Placeholder for singleLR API compatibility.
+    max_iter: int = 1000,  # Placeholder; may be overridden by rfm_iters.
+    C: float = 1.0,  # Placeholder for singleLR API compatibility.
+    penalty: str = "l2",  # Placeholder for singleLR API compatibility.
+    n_jobs: Optional[int] = None,  # Placeholder for singleLR API compatibility.
     summary_only: bool = True,
     save_path: Optional[str] = None,
     val_size: float = 0.2,
     rfm_iters: Optional[int] = None,
-    n_trees: int = 1,             # Reserved placeholder, unused in current adapter.
-    n_tree_iters: int = 0,        # Reserved placeholder, unused in current adapter.
+    n_trees: int = 1,  # Reserved placeholder, unused in current adapter.
+    n_tree_iters: int = 0,  # Reserved placeholder, unused in current adapter.
     split_method: str = "top_vector_agop_on_subset",  # Reserved placeholder.
     max_leaf_size: int = 60_000,  # Reserved placeholder, unused in current adapter.
     tuning_metric: str = "accuracy",
     random_state: Optional[int] = None,
-    n_threads: Optional[int] = None,   # Reserved placeholder, unused in current adapter.
+    n_threads: Optional[int] = None,  # Reserved placeholder, unused in current adapter.
     use_default_params: bool = False,  # Kept for backward compatibility; ignored.
-    hparam_trials: int = 8,       # Kept for backward compatibility; ignored.
+    hparam_trials: int = 8,  # Kept for backward compatibility; ignored.
     standardize: bool = True,
     return_details: bool = False,
     split_subset_size: int = 1500,  # Reserved placeholder, unused in current adapter.
@@ -224,9 +274,24 @@ def run_xrfm(
     Notes:
     - solver/penalty/C/n_jobs are API-compat placeholders only.
     - tuning_metric supports acc/auc/f1/top_agop_vectors_ols_auc/mse.
+    - Supplying X_val and y_val disables the legacy internal split and tunes
+      exclusively on that explicit validation set.
     - return_details=True returns (test_metric, val_metric, best_hparams).
     """
-    del solver, penalty, n_jobs, C, n_trees, n_tree_iters, split_method, max_leaf_size, n_threads, use_default_params, hparam_trials, split_subset_size  # Drop compatibility placeholders.
+    del (
+        solver,
+        penalty,
+        n_jobs,
+        C,
+        n_trees,
+        n_tree_iters,
+        split_method,
+        max_leaf_size,
+        n_threads,
+        use_default_params,
+        hparam_trials,
+        split_subset_size,
+    )  # Drop compatibility placeholders.
 
     t0 = time.perf_counter()
     metric_key = _normalize_metric_name(tuning_metric)
@@ -234,11 +299,24 @@ def run_xrfm(
     rng_seed = 0 if random_state is None else int(random_state)
     np.random.seed(rng_seed)
     torch.manual_seed(rng_seed)
+    if torch.cuda.is_available():
+        torch.cuda.manual_seed_all(rng_seed)
     device_str = "cuda" if torch.cuda.is_available() else "cpu"
     device = torch.device(device_str)
 
-    if val_size is None or val_size <= 0 or len(X_train) < 5:
-        X_tr, X_val, y_tr, y_val = X_train, X_test, y_train, y_test
+    if (X_val is None) != (y_val is None):
+        raise ValueError("X_val and y_val must be supplied together")
+    explicit_validation = X_val is not None
+    if explicit_validation:
+        X_tr = X_train
+        y_tr = y_train
+        if len(X_val) == 0:
+            raise ValueError("explicit xRFM validation set cannot be empty")
+    elif val_size is None or val_size <= 0 or len(X_train) < 5:
+        raise ValueError(
+            "xRFM selection requires an explicit validation set or a usable "
+            "training-only validation split; test data cannot be used for tuning"
+        )
     else:
         strat = y_train if len(np.unique(y_train)) > 1 else None
         X_tr, X_val, y_tr, y_val = train_test_split(
@@ -267,6 +345,11 @@ def run_xrfm(
     hyperparams = {
         "rfm_iters": int(rfm_iters if rfm_iters is not None else min(max_iter, 10)),
         "n_components": int(max(1, n_components)),
+        "validation_source": (
+            "explicit_outer_validation"
+            if explicit_validation
+            else "legacy_internal_split"
+        ),
     }
     search_space = {}  # Search space is defined inside _train_rfm_like_repo.
 
@@ -283,6 +366,8 @@ def run_xrfm(
         )
 
     best_model, best_val_score, best_h, concept_vec = _search_on_device(device_str)
+    if isinstance(best_h, dict):
+        best_h["validation_source"] = hyperparams["validation_source"]
 
     # If GPU search fails, automatically retry on CPU.
     if best_model is None and device_str == "cuda":
@@ -296,6 +381,8 @@ def run_xrfm(
         else:
             print("[xrfm][warn] GPU search failed; retrying on CPU.", file=sys.stderr)
         best_model, best_val_score, best_h, concept_vec = _search_on_device("cpu")
+        if isinstance(best_h, dict):
+            best_h["validation_source"] = hyperparams["validation_source"]
 
     if best_model is None:
         err_summary = best_h.get("errors", []) if isinstance(best_h, dict) else []
@@ -304,7 +391,9 @@ def run_xrfm(
             msg += f" Example error: {err_summary[0].splitlines()[-1]}"
         raise RuntimeError(msg)
 
-    X_te_for_pred = X_te_t.to(best_model.device) if hasattr(best_model, "device") else X_te_t
+    X_te_for_pred = (
+        X_te_t.to(best_model.device) if hasattr(best_model, "device") else X_te_t
+    )
     test_preds = best_model.predict(X_te_for_pred)
     test_metrics = _compute_prediction_metrics(test_preds, y_te_t.to(best_model.device))
     test_metric = test_metrics.get(metric_key, test_metrics.get("acc"))
@@ -329,7 +418,11 @@ def run_xrfm(
     if save_path:
         with open(save_path, "w", encoding="utf-8") as f:
             json.dump(
-                {"test_metric": float(test_metric), "val_metric": float(best_val_score), "hparams": best_h},
+                {
+                    "test_metric": float(test_metric),
+                    "val_metric": float(best_val_score),
+                    "hparams": best_h,
+                },
                 f,
                 ensure_ascii=False,
                 indent=2,

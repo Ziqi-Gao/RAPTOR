@@ -2,7 +2,6 @@ models:
   - google/gemma-7b-it
   - meta-llama/Meta-Llama-3.1-8B-Instruct
   - meta-llama/Meta-Llama-3.1-70B-Instruct
-  - meta-llama/Llama-3.3-70B-Instruct
   - Qwen/Qwen2.5-3B-Instruct
   - Qwen/Qwen2.5-7B-Instruct
   - Qwen/Qwen2.5-32B-Instruct
@@ -24,3 +23,16 @@ methods:
   - singlelr
   - xrfm
   - gcs
+  - fixed_reg
+  - dim_midpoint
+
+# Llama-3.3-70B-Instruct was deferred; it is outside the 36-setting main grid.
+
+accuracy:
+  outer_seeds: [42, 43, 44, 45, 46]
+  primary_protocol: rowwise
+  grouped_protocol: grouped_split_sensitivity
+  grouped_methods: [singlelr, xrfm, gcs]
+  grouped_columns: {counterfact: subject, cities: city}
+  layer_tie_rule: lowest_stored_layer_index
+  sample_standard_deviation_ddof: 1

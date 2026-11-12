@@ -1,0 +1,5 @@
+metric,Original,GCS,RAPTOR,common_valid_pairs
+target_sentiment_strength,1.74,2.14,2.88,160
+output_quality,,7.88,7.91,160
+naturalness,,7.89,7.93,160
+overall_steering_success,5.61,5.76,6.05,160

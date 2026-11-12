@@ -1,0 +1,10 @@
+{
+  "producer_commit": "e3b924e65cf44b71c12fcb02a2c4510eaa077c1a",
+  "source_sha256": "9d2a920549324aaddd5ae5478ab2e38720451231d89aca96464fc7675dcfcf4c",
+  "function_ast_sha256": {
+    "get_blocks": "28273c6c7fe294b6c4e5f922e1a8ee8ad6079053a1301f71f1cbf38d37a7b044",
+    "select_active_layers": "39f11fbf0ee273438146a3e85c7fe9fd9804ea9ffc2f63e7d291c192e069a429",
+    "compute_adaptive_epsilon": "659628345fe183cde177d784b1f4291d09d02a2659727789b5ce0084853931fc",
+    "register_steering_hooks_sequential": "9112c765caee54d63c082856dac2308554c1287a708430c7b23a76078c928349"
+  }
+}

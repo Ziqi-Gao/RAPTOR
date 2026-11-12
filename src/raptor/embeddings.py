@@ -2,7 +2,7 @@ from __future__ import annotations
 
 import argparse
 import os
-from typing import List
+from typing import Any, List, Mapping, Optional
 
 import numpy as np
 import torch
@@ -11,6 +11,10 @@ from transformers import AutoModelForCausalLM, AutoTokenizer, BitsAndBytesConfig
 
 from raptor.core import save_embeddings_npz
 from raptor.data import DataProcessing
+from raptor.embedding_checkpoint import (
+    EmbeddingCheckpoint,
+    hash_embedding_inputs,
+)
 from raptor.model_utils import LLM
 
 
@@ -71,6 +75,8 @@ def collect_embeddings(
     cuda: int,
     pos_q: List[str],
     neg_q: List[str],
+    checkpoint_dir: Optional[str] = None,
+    checkpoint_identity: Optional[Mapping[str, Any]] = None,
 ):
     quant_cfg = None
     if quant == 8:
@@ -91,15 +97,84 @@ def collect_embeddings(
             quantization_config=quant_cfg,
             cache_dir=cache_dir,
         )
-    else:
+    elif quant == 16:
+        # Full BF16 weights for 70B models are sharded across all GPUs granted
+        # to the job. `low_cpu_mem_usage` avoids materializing a second full
+        # state dict while loading.
         model = AutoModelForCausalLM.from_pretrained(
             model_source,
             torch_dtype=torch.bfloat16,
+            device_map="auto",
+            low_cpu_mem_usage=True,
             cache_dir=cache_dir,
         )
+    else:
+        raise ValueError(f"Unsupported quantization/precision value: {quant}")
 
     layer_count = build_layer_count(model_id, model)
+    cfg = getattr(model, "config", None)
+    dim = getattr(cfg, "hidden_size", None)
+    if dim is None:
+        dim = getattr(cfg, "n_embd", None)
+    if dim is None:
+        raise RuntimeError(f"Unable to determine hidden size for {model_id}.")
+    dim = int(dim)
     llm = LLM(cuda_id=cuda, layer_num=layer_count, quant=quant)
+
+    checkpoint = None
+    if checkpoint_dir is not None:
+        identity = dict(checkpoint_identity or {})
+        identity.update(
+            {
+                "model_source": str(model_id),
+                "quant": int(quant),
+                "input_sha256": hash_embedding_inputs(pos_q, neg_q),
+            }
+        )
+        checkpoint = EmbeddingCheckpoint(
+            checkpoint_dir,
+            identity=identity,
+            n_pos=len(pos_q),
+            n_neg=len(neg_q),
+            layers=layer_count,
+            dim=dim,
+        )
+        samples = (pos_q, neg_q)
+        progress = tqdm(
+            total=len(pos_q) + len(neg_q),
+            initial=checkpoint.completed,
+            desc="checkpointed embeddings",
+        )
+        try:
+            for index in range(
+                checkpoint.completed,
+                len(pos_q) + len(neg_q),
+            ):
+                if index < len(pos_q):
+                    text = samples[0][index]
+                else:
+                    text = samples[1][index - len(pos_q)]
+                with torch.no_grad():
+                    hidden = llm.get_hidden_states(model, tokenizer, text)
+                layer_vectors = np.stack(
+                    [
+                        hidden[layer][-1, :]
+                        .detach()
+                        .float()
+                        .cpu()
+                        .numpy()
+                        for layer in range(layer_count)
+                    ],
+                    axis=0,
+                )
+                checkpoint.append(index, layer_vectors)
+                progress.update(1)
+        finally:
+            progress.close()
+
+        X_pos, X_neg = checkpoint.layer_arrays()
+        return X_pos, X_neg, layer_count, dim, checkpoint
+
     pos_layers = [[] for _ in range(layer_count)]
     neg_layers = [[] for _ in range(layer_count)]
 
@@ -111,12 +186,15 @@ def collect_embeddings(
             with torch.no_grad():
                 hidden = llm.get_hidden_states(model, tokenizer, text)
             for layer in range(layer_count):
-                storage[layer].append(hidden[layer, -1, :].cpu().numpy())
+                # NumPy cannot represent torch.bfloat16. Persist float32 so
+                # quantized large-model runs share the same downstream dtype.
+                storage[layer].append(
+                    hidden[layer][-1, :].detach().float().cpu().numpy()
+                )
 
     X_pos = [np.vstack(pos_layers[layer]) for layer in range(layer_count)]
     X_neg = [np.vstack(neg_layers[layer]) for layer in range(layer_count)]
-    dim = int(X_pos[0].shape[1]) if X_pos else 0
-    return X_pos, X_neg, layer_count, dim
+    return X_pos, X_neg, layer_count, dim, checkpoint
 
 
 def main() -> None:
@@ -133,19 +211,31 @@ def main() -> None:
 
     data = DataProcessing(args.datapath, args.dataset, args.noise)
     pos_q, neg_q, _, _ = data.dispatcher()
-    X_pos, X_neg, _, _ = collect_embeddings(
+    model_tag = args.model.replace("/", "-")
+    checkpoint_path = os.path.join(
+        args.savepath,
+        ".checkpoints",
+        f"{model_tag}_{args.dataset}",
+    )
+    X_pos, X_neg, _, _, checkpoint = collect_embeddings(
         model_id=args.model,
         cache_dir=args.model_path,
         quant=args.quant,
         cuda=args.cuda,
         pos_q=pos_q,
         neg_q=neg_q,
+        checkpoint_dir=checkpoint_path,
+        checkpoint_identity={
+            "model": args.model,
+            "dataset": args.dataset,
+        },
     )
 
     os.makedirs(args.savepath, exist_ok=True)
-    model_tag = args.model.replace("/", "-")
     out_npz = os.path.join(args.savepath, f"{model_tag}_{args.dataset}_embeddings.npz")
     save_embeddings_npz(out_npz, args.model, args.dataset, X_pos, X_neg)
+    if checkpoint is not None:
+        checkpoint.remove()
     print(f"Saved embeddings to: {out_npz}")
 
 

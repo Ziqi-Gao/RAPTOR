@@ -32,3 +32,15 @@ wandb/
 hf_cache/
 RFM/hf_cache/
 models--*/
+
+# Local research/session state and raw third-party data are never release assets.
+.codex/
+.camera_ready_worktrees/
+camera_ready_coord/
+build/
+dist/
+.venv*/
+dataset/*.csv
+dataset/*.json
+dataset/*.train
+dataset/hatexplain/*.json

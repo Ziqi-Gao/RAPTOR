@@ -15,7 +15,7 @@ to steer FROM positive sentiment TOWARDS negative sentiment.
 Sequential Steering Algorithm:
     Require: LLM with L layers, classifier P_m, thresholds P_target = 0.01% (negative), P_1 = 90%, instruction x
     1: for l = 1 to L do
-    2:     if TestAcc(P_m) > P_1 then                    # Only use high-accuracy layers
+    2:     if ValAcc(P_m) > P_1 then                    # Only use high-accuracy layers
     3:         e <- Embedding of x at the l-th layer after steering previous layers
     4:         if P_m(e) > P_target then                 # Steer if still too positive (not negative enough)
     5:             epsilon <- (sigmoid^(-1)(P_target) - b - w^T*e)   # Adaptive magnitude (negative to steer to negative)
@@ -25,7 +25,7 @@ Sequential Steering Algorithm:
 
 Key Implementation Details:
     - Sequential layer-by-layer steering (hooks are registered in sorted order)
-    - Line 2: Only steer layers with test accuracy > P_1 (default 90%)
+    - Line 2: Only steer layers with pre-refit validation accuracy > P_1 (default 90%)
     - Line 3: Embeddings obtained after previous layers have been steered (via hooks)
     - Line 4: Steer when P_m(e) > P_target (i.e., still too positive, need to steer towards negative)
     - Line 5: Adaptive epsilon (negative value) decreases perturbation to reach target negative probability
@@ -38,9 +38,11 @@ from __future__ import annotations
 
 import argparse
 import csv
+import json
 import os
 import random
 import sys
+import tempfile
 from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Iterable, Mapping, Optional, Sequence
@@ -51,6 +53,7 @@ from transformers import AutoModelForCausalLM, AutoTokenizer, BitsAndBytesConfig
 
 from raptor.core import REPO_ROOT
 from raptor.data import DataProcessing
+from raptor.probes.tuning import PRE_REFIT_VALIDATION_SOURCE, VALIDATION_PROTOCOL_VERSION
 
 
 # ---------------------------------------------------------------------------
@@ -85,7 +88,7 @@ class SteeringConfig:
 
     # Adaptive steering parameters
     target_prob: float = 0.01  # Target probability for negative steering (0.0001 = 0.01% positive, 99.99% negative)
-    accuracy_threshold: float = 0.9  # Minimum test accuracy to use a layer (0.9 = 90%)
+    accuracy_threshold: float = 0.9  # Require pre-refit validation accuracy > threshold.
     bias: float = 0.0
     normalize_l2: bool = True
     
@@ -234,6 +237,125 @@ def get_blocks(model):
     if hasattr(model, "model") and hasattr(model.model, "layers"):
         return model.model.layers
     raise RuntimeError("Unable to locate transformer blocks.")
+
+
+def load_validation_accuracies(
+    savepath: Path,
+    model_id: str,
+    dataset_tag: str,
+    tot_layer: int,
+    *,
+    vector_kind: str,
+) -> list[Optional[float]]:
+    """Load audited train-only, pre-refit validation reliability per layer.
+
+    Legacy ``acc_test``/``*_holdout`` arrays are deliberately not fallbacks.
+    A legacy accuracy checkpoint can be exported after auditing its source;
+    that export must explicitly retain ``val_acc_pre_refit`` and its source.
+    """
+    filenames = {
+        "singlelr": "singlelr_results.npz", "gcs": "gcs_results.npz",
+        "xrfm": "rfm_results.npz", "baseline": "baseline_results.npz",
+        "bagging": "gauss_bagging_results.npz", "stacking": "gauss_kfold_results.npz",
+    }
+    if vector_kind not in filenames:
+        raise ValueError(f"Unsupported vector_kind {vector_kind!r}")
+    name = filenames[vector_kind]
+    base = f"{to_model_tag(model_id)}_{dataset_tag}"
+    paths = [savepath / to_model_tag(model_id) / dataset_tag / name,
+             savepath / f"{base}_{name}", savepath / name]
+    for path in paths:
+        if not path.is_file():
+            continue
+        with np.load(path, allow_pickle=False) as data:
+            source = str(np.asarray(data["validation_source"]).item()) if "validation_source" in data else None
+            if source != PRE_REFIT_VALIDATION_SOURCE or "val_acc_pre_refit" not in data:
+                raise ValueError(
+                    f"{path} has no audited pre-refit validation reliability; "
+                    "export verified train-only validation scores before steering"
+                )
+            values = np.asarray(data["val_acc_pre_refit"], dtype=float).reshape(-1)
+        return [float(values[i]) if i < len(values) and np.isfinite(values[i]) else None
+                for i in range(tot_layer)]
+    return [None] * tot_layer
+
+
+def select_active_layers(
+    vectors: Sequence[Optional[torch.Tensor]],
+    validation_accuracies: Sequence[Optional[float]],
+    *,
+    layers: Optional[Sequence[int]] = None,
+    accuracy_threshold: float = 0.9,
+    reliability_enabled: Optional[bool] = None,
+    reliability_comparison: Optional[str] = ">",
+) -> list[int]:
+    """Keep every reliable candidate layer, preserving the original range.
+
+    This is threshold filtering for steering, separate from classification's
+    single best validation layer. Explicit layer lists still require reliability.
+    ``None`` preserves the legacy threshold>0 enabled convention. An explicit
+    task policy can use inclusive comparison or disable filtering entirely.
+    """
+    if reliability_enabled is not None and not isinstance(reliability_enabled, bool):
+        raise ValueError("reliability_enabled must be an explicit bool or legacy None")
+    enabled = accuracy_threshold > 0 if reliability_enabled is None else reliability_enabled
+    if reliability_comparison not in {">", ">=", None} or (enabled and reliability_comparison is None):
+        raise ValueError("enabled reliability comparison must be > or >=")
+    if enabled and (isinstance(accuracy_threshold, bool) or not np.isfinite(accuracy_threshold)
+                    or not 0 <= accuracy_threshold <= 1):
+        raise ValueError("reliability threshold must be a finite probability")
+    if enabled and validation_accuracies is None:
+        raise ValueError("Steering reliability requires pre-refit validation accuracies")
+    candidates = range(1, len(vectors) - 1) if layers is None else layers
+    active = []
+    for layer in candidates:
+        if not 0 <= layer < len(vectors):
+            raise ValueError(f"Layer {layer} out of range for {len(vectors)} layers")
+        if vectors[layer] is None:
+            if layers is not None:
+                raise FileNotFoundError(f"Missing concept vector for layer {layer}")
+            continue
+        if enabled:
+            score = validation_accuracies[layer]
+            if score is None or not np.isfinite(score):
+                continue
+            qualifies = (score >= accuracy_threshold if reliability_comparison == ">="
+                         else score > accuracy_threshold)
+            if not qualifies:
+                continue
+        active.append(int(layer))
+    return active
+
+
+def _save_active_layer_decision(config, target_layers, validation_accuracies):
+    """Persist the frozen validation decision before downstream generation."""
+    path = config.output_csv.with_suffix(config.output_csv.suffix + ".selection.json")
+    path.parent.mkdir(parents=True, exist_ok=True)
+    payload = {
+        "validation_protocol_version": VALIDATION_PROTOCOL_VERSION,
+        "validation_source": PRE_REFIT_VALIDATION_SOURCE,
+        "candidate_layers": list(range(1, len(validation_accuracies) - 1)) if config.layers is None else list(config.layers),
+        "active_layers": list(target_layers),
+        "rule": "validation_accuracy > threshold for every candidate layer",
+        "accuracy_threshold": config.accuracy_threshold,
+        "validation_accuracies": list(validation_accuracies),
+        "results_root": str(config.savepath.resolve()),
+        "model_id": config.model_id,
+        "dataset": config.dataset_tag,
+        "vector_kind": config.vector_kind,
+        "generation_seed_base": config.seed_base,
+    }
+    fd, tmp = tempfile.mkstemp(prefix=f".{path.name}.", dir=path.parent)
+    try:
+        with os.fdopen(fd, "w", encoding="utf-8") as handle:
+            json.dump(payload, handle, indent=2)
+            handle.write("\n")
+            handle.flush()
+            os.fsync(handle.fileno())
+        os.replace(tmp, path)
+    finally:
+        if os.path.exists(tmp):
+            os.unlink(tmp)
 
 
 def load_test_accuracies(
@@ -530,6 +652,8 @@ def compute_adaptive_epsilon(
     concept_vector: torch.Tensor,
     bias: float,
     target_prob: float,
+    *,
+    probe_weight: Optional[torch.Tensor] = None,
 ) -> torch.Tensor:
     """
     Compute adaptive perturbation magnitude to steer towards target probability.
@@ -555,6 +679,26 @@ def compute_adaptive_epsilon(
     Returns:
         epsilon: Adaptive perturbation magnitude (negative to steer away, positive to steer towards)
     """
+    # Optional calibrated raw-probe path. The legacy normalized classifier
+    # below remains unchanged unless its own raw weight is explicitly supplied.
+    if probe_weight is not None:
+        if not 0.0 < target_prob < 1.0:
+            raise ValueError("target_prob must lie strictly between zero and one")
+        compute_dtype = torch.float32 if embedding.dtype in (torch.float16, torch.bfloat16) else embedding.dtype
+        hidden = embedding.to(dtype=compute_dtype)
+        weight = probe_weight.to(device=embedding.device, dtype=compute_dtype)
+        direction = concept_vector.to(device=embedding.device, dtype=compute_dtype)
+        if weight.shape != direction.shape or weight.shape[-1] != embedding.shape[-1]:
+            raise ValueError("raw probe and injection direction must match the hidden dimension")
+        slope = torch.sum(weight * direction)
+        if not torch.isfinite(slope) or slope <= 0:
+            raise ValueError("raw probe must have positive finite projection onto its own direction")
+        current_logit = bias + torch.sum(hidden * weight, dim=-1, keepdim=True)
+        target_logit = torch.log(torch.tensor(target_prob / (1 - target_prob), device=embedding.device, dtype=compute_dtype))
+        current_prob = torch.sigmoid(current_logit)
+        gate = current_prob < target_prob if target_prob > 0.5 else current_prob > target_prob
+        return torch.where(gate, (target_logit - current_logit) / slope, torch.zeros_like(current_logit))
+
     # Convert target probability to logit: sigmoid^(-1)(P_target)
     logit_target = torch.log(torch.tensor(target_prob / (1 - target_prob), device=embedding.device))
     
@@ -590,11 +734,17 @@ def register_steering_hooks_sequential(
     *,
     target_prob: float = 0.0001,
     bias: float = 0.0,
+    probe_weights: Optional[Sequence[Optional[torch.Tensor]]] = None,
+    probe_biases: Optional[Sequence[Optional[float]]] = None,
+    validation_accuracies: Optional[Sequence[Optional[float]]] = None,
     test_accuracies: Optional[Sequence[Optional[float]]] = None,
     accuracy_threshold: float = 0.9,
     use_position_coefficients: bool = False,
     position_decay_rate: float = 0.1,
     verbose: bool = True,
+    activation_site: str = "transformer_block_output",
+    reliability_enabled: Optional[bool] = None,
+    reliability_comparison: Optional[str] = ">",
 ):
     """
     Register adaptive steering hooks following sequential layer-by-layer steering algorithm.
@@ -603,7 +753,7 @@ def register_steering_hooks_sequential(
         - Epsilon computed dynamically per layer to reach target_prob
         - Algorithm:
             for l = 1 to L do:
-                if TestAcc(P_m) > P_1 then:
+                if ValAcc(P_m) > P_1 then:
                     e <- Embedding at l-th layer after steering previous layers
                     if should_steer(e, P_target) then:
                         epsilon <- (sigmoid^(-1)(P_target) - b - w^T*e)  # Adaptive magnitude
@@ -619,21 +769,60 @@ def register_steering_hooks_sequential(
     Args:
         target_prob: Target probability for adaptive steering (0.0001 = steer away from hate, 0.99 = steer towards hate)
         bias: Bias term for probability calculation (default 0.0)
-        test_accuracies: Test accuracies for each layer (for P_1 check)
-        accuracy_threshold: Threshold P_1 for test accuracy (default 0.9)
+        validation_accuracies: Pre-refit validation accuracies for the P_1 check
+        accuracy_threshold: Threshold P_1 for pre-refit validation accuracy (default 0.9)
+        reliability_enabled: Explicit task filtering policy; None retains legacy behavior.
+        reliability_comparison: > or >= when enabled, None allowed when disabled.
         use_position_coefficients: Enable position-dependent steering strength (default False)
         position_decay_rate: Decay rate for exponential weighting (default 0.1)
         verbose: If True, print epsilon values for first token only (default True)
+        activation_site: Explicit hook coordinate. The default preserves the
+            original block-output path; the opt-in post_attention_layernorm
+            output requires separately verified matching cache coordinates.
     """
+    if (probe_weights is None) != (probe_biases is None):
+        raise ValueError("raw calibration requires both own per-layer probe_weights and probe_biases")
+    if test_accuracies is not None:
+        raise ValueError("Steering reliability requires pre-refit validation accuracies; test accuracies cannot select layers")
+    if activation_site not in {"transformer_block_output", "post_attention_layernorm"}:
+        raise ValueError(f"Unsupported activation_site: {activation_site}")
     blocks = get_blocks(model)
+    if activation_site == "post_attention_layernorm" and (
+        not hasattr(model, "model") or not hasattr(model.model, "layers")
+        or blocks is not model.model.layers
+    ):
+        raise ValueError("post_attention_layernorm requires the explicit model.layers block structure")
     handles = []
     
     # Sort layers to ensure sequential processing
     sorted_layers = sorted(layer_ids)
-    
+    active_layers = select_active_layers(
+        vectors, validation_accuracies, layers=sorted_layers,
+        accuracy_threshold=accuracy_threshold, reliability_enabled=reliability_enabled,
+        reliability_comparison=reliability_comparison,
+    )
+    # Preflight every planned hook before registering any module. This also
+    # prevents a missing later layer/probe from leaving an earlier intervention.
+    planned_hooks = []
+    for layer in active_layers:
+        if not (0 <= layer < len(blocks)):
+            raise ValueError(f"Layer {layer} out of range; model has {len(blocks)} layers.")
+        vec = vectors[layer]
+        if vec is None:
+            raise FileNotFoundError(f"Missing concept vector for layer {layer}.")
+        raw_weight = None if probe_weights is None else probe_weights[layer]
+        layer_bias = bias if probe_biases is None else probe_biases[layer]
+        if probe_weights is not None and (raw_weight is None or layer_bias is None):
+            raise ValueError(f"Missing own raw probe weight/intercept for layer {layer}.")
+        hook_module = (blocks[layer] if activation_site == "transformer_block_output"
+                       else getattr(blocks[layer], "post_attention_layernorm", None))
+        if hook_module is None or not callable(getattr(hook_module, "register_forward_hook", None)):
+            raise ValueError(f"Layer {layer} has no supported {activation_site} hook module")
+        planned_hooks.append((layer, hook_module, vec, raw_weight, layer_bias))
+
     # Flag to print only for first forward pass (first token generation)
     first_pass = {"done": False}
-    
+
     print(f"\n[Adaptive Steering] Sequential layer-by-layer steering:")
     print(f"  - Target layers: {sorted_layers}")
     print(f"  - P_target (target_prob): {target_prob}")
@@ -641,27 +830,15 @@ def register_steering_hooks_sequential(
     print(f"  - Position-based steering: {use_position_coefficients}")
     if use_position_coefficients:
         print(f"  - Position decay rate: {position_decay_rate}")
-    
+
     # Track generation step for position-based steering
     # This counter increments each time we generate a new token
     generation_step = {"count": 0}
 
-    for layer in sorted_layers:
-        if not (0 <= layer < len(blocks)):
-            raise ValueError(f"Layer {layer} out of range; model has {len(blocks)} layers.")
-        vec = vectors[layer]
-        if vec is None:
-            raise FileNotFoundError(f"Missing concept vector for layer {layer}.")
-        
-        # Check if TestAcc(P_m) > P_1
-        if test_accuracies is not None and test_accuracies[layer] is not None:
-            if test_accuracies[layer] <= accuracy_threshold:
-                print(f"  [Layer {layer}] SKIP: TestAcc={test_accuracies[layer]:.4f} <= P_1={accuracy_threshold}")
-                continue
-            else:
-                print(f"  [Layer {layer}] TestAcc={test_accuracies[layer]:.4f} > P_1 [ok]")
-
-        def hook_fn(_module, _inputs, output, *, layer_idx=layer, base_vec=vec, last_layer=sorted_layers[-1], all_layers=sorted_layers):
+    for layer, hook_module, vec, raw_weight, layer_bias in planned_hooks:
+        def hook_fn(_module, _inputs, output, *, layer_idx=layer, base_vec=vec,
+                    classifier_weight=raw_weight, classifier_bias=layer_bias,
+                    last_layer=sorted_layers[-1], all_layers=sorted_layers):
             if isinstance(output, tuple):
                 hidden, others = output[0], output[1:]
             else:
@@ -676,9 +853,12 @@ def register_steering_hooks_sequential(
                     f"Layer {layer_idx}: vector dim {steer_vec.shape[-1]} != hidden dim {last.shape[-1]}"
                 )
 
-            # Compute current probability P_m(e) for last token only
-            w_dot_e = torch.sum(last * steer_vec, dim=-1, keepdim=True)
-            current_logit = bias + w_dot_e
+            # Raw calibration retains this method's fitted weight and intercept.
+            calibration_weight = (steer_vec if classifier_weight is None else
+                                  classifier_weight.to(device=last.device, dtype=(
+                                      torch.float32 if last.dtype in (torch.float16, torch.bfloat16) else last.dtype)))
+            w_dot_e = torch.sum(last * calibration_weight, dim=-1, keepdim=True)
+            current_logit = classifier_bias + w_dot_e
             current_prob = torch.sigmoid(current_logit)
             
             # Steer if current probability hasn't reached target yet
@@ -695,8 +875,9 @@ def register_steering_hooks_sequential(
                 epsilon = compute_adaptive_epsilon(
                     embedding=last,
                     concept_vector=steer_vec,
-                    bias=bias,
+                    bias=classifier_bias,
                     target_prob=target_prob,
+                    probe_weight=calibration_weight if classifier_weight is not None else None,
                 )
                 
                 # Apply position-based decay if enabled
@@ -726,8 +907,8 @@ def register_steering_hooks_sequential(
                 
                 # DEBUG: Print steering effect for last layer
                 if verbose and layer_idx == last_layer:
-                    new_w_dot_e = torch.sum(new_last * steer_vec, dim=-1, keepdim=True)
-                    new_logit = bias + new_w_dot_e
+                    new_w_dot_e = torch.sum(new_last * calibration_weight, dim=-1, keepdim=True)
+                    new_logit = classifier_bias + new_w_dot_e
                     new_prob = torch.sigmoid(new_logit)
                     logit_change = (new_logit - current_logit).item()
                     print(f"    -> After steering: P_m={new_prob.item():.4f}, logit={new_logit.item():.2f} "
@@ -743,8 +924,8 @@ def register_steering_hooks_sequential(
             
             # DEBUG: Print info for all layers in Step 0 to verify steering is applied
             if verbose and generation_step["count"] == 0:  # Only for first token to avoid spam
-                final_w_dot_e = torch.sum(new_last * steer_vec, dim=-1, keepdim=True)
-                final_logit = bias + final_w_dot_e
+                final_w_dot_e = torch.sum(new_last * calibration_weight, dim=-1, keepdim=True)
+                final_logit = classifier_bias + final_w_dot_e
                 final_prob = torch.sigmoid(final_logit)
                 # Get epsilon value (already computed if should_steer is True)
                 if epsilon is not None:
@@ -761,7 +942,12 @@ def register_steering_hooks_sequential(
 
             return (hidden, *others) if others is not None else hidden
 
-        handles.append(blocks[layer].register_forward_hook(hook_fn))
+        try:
+            handles.append(hook_module.register_forward_hook(hook_fn))
+        except BaseException:
+            for handle in handles:
+                handle.remove()
+            raise
 
     return handles
 
@@ -773,11 +959,17 @@ def register_steering_hooks(
     *,
     target_prob: float = 0.99,
     bias: float = 0.0,
+    probe_weights: Optional[Sequence[Optional[torch.Tensor]]] = None,
+    probe_biases: Optional[Sequence[Optional[float]]] = None,
+    validation_accuracies: Optional[Sequence[Optional[float]]] = None,
     test_accuracies: Optional[Sequence[Optional[float]]] = None,
     accuracy_threshold: float = 0.9,
     use_position_coefficients: bool = False,
     position_decay_rate: float = 0.1,
     verbose: bool = True,
+    activation_site: str = "transformer_block_output",
+    reliability_enabled: Optional[bool] = None,
+    reliability_comparison: Optional[str] = ">",
 ):
     """
     Register adaptive steering hooks (wrapper for register_steering_hooks_sequential).
@@ -785,8 +977,8 @@ def register_steering_hooks(
     Args:
         target_prob: Target probability for adaptive steering (0.99 = positive, 0.01 = negative)
         bias: Bias term for probability calculation (default 0.0)
-        test_accuracies: Test accuracies for each layer (for P_1 check)
-        accuracy_threshold: Threshold P_1 for test accuracy (default 0.9)
+        validation_accuracies: Pre-refit validation accuracies for the P_1 check
+        accuracy_threshold: Threshold P_1 for pre-refit validation accuracy (default 0.9)
         use_position_coefficients: Enable position-dependent steering strength (default False)
         position_decay_rate: Decay rate for exponential weighting (default 0.1)
         verbose: If True, print epsilon values for first token only (default True)
@@ -797,11 +989,17 @@ def register_steering_hooks(
         layer_ids=list(layer_ids),
         target_prob=target_prob,
         bias=bias,
+        probe_weights=probe_weights,
+        probe_biases=probe_biases,
+        validation_accuracies=validation_accuracies,
         test_accuracies=test_accuracies,
         accuracy_threshold=accuracy_threshold,
         use_position_coefficients=use_position_coefficients,
         position_decay_rate=position_decay_rate,
         verbose=verbose,
+        activation_site=activation_site,
+        reliability_enabled=reliability_enabled,
+        reliability_comparison=reliability_comparison,
     )
 
 
@@ -1591,8 +1789,8 @@ def generate_bagging_steering_csv(
         gcs_concept=config.gcs_concept,
     )
     
-    # Load test accuracies (only use layers where TestAcc > P_1)
-    test_accuracies = load_test_accuracies(
+    # Load pre-refit validation accuracies (only use layers where ValAcc > P_1)
+    validation_accuracies = load_validation_accuracies(
         config.savepath,
         config.model_id,
         config.dataset_tag,
@@ -1600,45 +1798,13 @@ def generate_bagging_steering_csv(
         vector_kind=config.vector_kind,
     )
 
-    if config.layers is None:
-        # Filter layers based on vector availability and test accuracy
-        target_layers = []
-        vectors_loaded = sum(1 for v in vectors if v is not None)
-        print(f"[INFO] Loaded {vectors_loaded}/{tot_layer} concept vectors")
-        if test_accuracies:
-            acc_available = sum(1 for a in test_accuracies if a is not None)
-            print(f"[INFO] Loaded {acc_available}/{tot_layer} test accuracies")
-        
-        for layer in range(1, tot_layer - 1):
-            if vectors[layer] is None:
-                print(f"[INFO] Skipping layer {layer}: concept vector not found")
-                continue
-            
-            # Only use layers where TestAcc(P_m) > P_1 (default 90%)
-            if test_accuracies is not None and config.accuracy_threshold > 0:
-                if test_accuracies[layer] is None or test_accuracies[layer] < config.accuracy_threshold:
-                    print(f"[INFO] Skipping layer {layer}: test_acc={test_accuracies[layer]} < {config.accuracy_threshold}")
-                    continue
-            
-            target_layers.append(layer)
-            print(f"[INFO] Using layer {layer}: test_acc={test_accuracies[layer] if test_accuracies and test_accuracies[layer] is not None else 'N/A'}")
-    else:
-        target_layers = []
-        for layer in config.layers:
-            if not (0 <= layer < tot_layer):
-                raise ValueError(f"Layer {layer} out of range for model with {tot_layer} layers.")
-            if vectors[layer] is None:
-                raise FileNotFoundError(f"Missing concept vector for layer {layer}.")
-            
-            # Check test accuracy constraint
-            if test_accuracies is not None and config.accuracy_threshold > 0:
-                if test_accuracies[layer] is None or test_accuracies[layer] < config.accuracy_threshold:
-                    print(f"[WARNING] Layer {layer} has test_acc={test_accuracies[layer]} < {config.accuracy_threshold}")
-            
-            target_layers.append(layer)
-    
+    target_layers = select_active_layers(
+        vectors, validation_accuracies, layers=config.layers,
+        accuracy_threshold=config.accuracy_threshold,
+    )
     if not target_layers:
-        raise RuntimeError("No usable layers found for steering. Check concept vectors and test accuracies.")
+        raise RuntimeError("No usable layers found for steering. Check concept vectors and pre-refit validation accuracies.")
+    _save_active_layer_decision(config, target_layers, validation_accuracies)
 
     encoded_prompts = prepare_encoded_prompts(
         tokenizer, device, prompt_specs, config.chat_template_default
@@ -1724,7 +1890,7 @@ def generate_bagging_steering_csv(
                 layer_ids=target_layers,
                 target_prob=config.target_prob,
                 bias=config.bias,
-                test_accuracies=test_accuracies,
+                validation_accuracies=validation_accuracies,
                 accuracy_threshold=config.accuracy_threshold,
                 use_position_coefficients=config.use_position_coefficients,
                 position_decay_rate=config.position_decay_rate,
@@ -1821,7 +1987,7 @@ def generate_unified_steering_csv(
         gcs_concept=config.gcs_concept,
     )
     
-    test_accuracies = load_test_accuracies(
+    validation_accuracies = load_validation_accuracies(
         config.savepath,
         config.model_id,
         config.dataset_tag,
@@ -1829,28 +1995,13 @@ def generate_unified_steering_csv(
         vector_kind=config.vector_kind,
     )
 
-    # Determine target layers
-    if config.layers is None:
-        target_layers = []
-        vectors_loaded = sum(1 for v in vectors if v is not None)
-        print(f"[INFO] Loaded {vectors_loaded}/{tot_layer} concept vectors")
-        if test_accuracies:
-            acc_available = sum(1 for a in test_accuracies if a is not None)
-            print(f"[INFO] Loaded {acc_available}/{tot_layer} test accuracies")
-        
-        for layer in range(1, tot_layer - 1):
-            if vectors[layer] is None:
-                continue
-            if test_accuracies is not None and config.accuracy_threshold > 0:
-                if test_accuracies[layer] is None or test_accuracies[layer] < config.accuracy_threshold:
-                    continue
-            target_layers.append(layer)
-            print(f"[INFO] Using layer {layer}: test_acc={test_accuracies[layer] if test_accuracies and test_accuracies[layer] is not None else 'N/A'}")
-    else:
-        target_layers = list(config.layers)
-    
+    target_layers = select_active_layers(
+        vectors, validation_accuracies, layers=config.layers,
+        accuracy_threshold=config.accuracy_threshold,
+    )
     if not target_layers:
         raise RuntimeError("No usable layers found for steering.")
+    _save_active_layer_decision(config, target_layers, validation_accuracies)
 
     # Get unique prompts (deduplicate by source text since we're doing unified)
     seen_sources = set()
@@ -1946,7 +2097,7 @@ def generate_unified_steering_csv(
                     layer_ids=target_layers,
                     target_prob=target_prob,
                     bias=config.bias,
-                    test_accuracies=test_accuracies,
+                    validation_accuracies=validation_accuracies,
                     accuracy_threshold=config.accuracy_threshold,
                     use_position_coefficients=config.use_position_coefficients,
                     position_decay_rate=config.position_decay_rate,
@@ -2062,7 +2213,7 @@ def parse_args() -> argparse.Namespace:
     
     # Adaptive steering parameters
     parser.add_argument("--target-prob", type=float, default=None, help="Target probability for adaptive steering. If not specified, uses dataset-specific default. (Low values steer AWAY from concept direction, high values steer TOWARDS)")
-    parser.add_argument("--accuracy-threshold", type=float, default=0.9, help="Minimum test accuracy to use a layer (default 90%%)")
+    parser.add_argument("--accuracy-threshold", type=float, default=0.9, help="Require train-only pre-refit validation accuracy strictly above this threshold (default 90%%)")
     parser.add_argument("--bias", type=float, default=0.0, help="Bias term for probability calculation in adaptive steering")
     parser.add_argument("--no-normalize-l2", action="store_true", help="Disable L2 normalization of concept vectors")
     

@@ -1,0 +1,9 @@
+dataset,setting,direction,layers,N_layer_prompt,success,intervention,alpha_median,alpha_p90,alpha_max,threshold
+counterfact,truth_to_lie,away,18,1152,1,0.833,10.5,66.5,97.5,0.7
+counterfact,lie_to_truth,towards,18,1152,1,0.556,6.88,59.25,81.5,0.7
+hatexplain,neutral_to_hate,towards,26,1664,1,0.654,6.8,49,67.5,
+hatexplain,neutral_to_nonhate,away,26,1664,1,0.538,4.7,24.5,249,
+sarcasm,neutral_to_sarcastic,towards,26,1664,1,0.715,8.83,28,143,
+sarcasm,neutral_to_sincere,away,26,1664,1,0.631,6.2,30.75,211,
+STSA,neutral_to_negative,away,26,1664,1,0.615,3.57,21.25,184,
+STSA,neutral_to_positive,towards,24,1536,1,0.792,12.38,29.25,130,0.8
