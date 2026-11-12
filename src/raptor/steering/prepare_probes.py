@@ -4,6 +4,7 @@ import argparse
 import json
 import os
 from pathlib import Path
+import re
 import tempfile
 import numpy as np
 from .controls import file_hash, load_bundle
@@ -26,14 +27,29 @@ def save(path, arrays, metadata):
 
 def export_checkpoints(paths, binding, output):
     """Never reads test accuracy; exports raw concept W and separate intercept."""
+    from raptor.experiments.accuracy_preparation import validate_layer_set
     if binding["method"] not in {"singlelr", "gcs", "fixed_reg"}:
         raise ValueError("supported steering methods are singlelr/gcs/fixed_reg; no xRFM steering")
+    finals, selection_count = [], 0
+    for path in map(Path, paths):
+        if re.fullmatch(r"layer_[0-9]+\.selection\.npz", path.name):
+            selection_count += 1
+            continue
+        match = re.fullmatch(r"layer_(0|[1-9][0-9]*)\.npz", path.name)
+        if match is None:
+            raise ValueError(f"expected final layer_<integer>.npz checkpoint: {path}")
+        finals.append((path, int(match.group(1))))
+    if selection_count:
+        print(f"[steering] excluded {selection_count} selection snapshot(s); "
+              "only final layer_<integer>.npz checkpoints are exported", flush=True)
+    if not finals:
+        raise ValueError("no final layer_<integer>.npz checkpoints supplied")
     rows, sources, identities = {}, [], []
-    for path in paths:
+    for path, filename_layer in finals:
         with np.load(path, allow_pickle=False) as data:
             meta = json.loads(str(data["metadata_json"].item()))
             identity = meta["identity"]
-            if meta.get("status") != "complete": raise ValueError("incomplete probe checkpoint")
+            if meta.get("status") != "complete": raise ValueError(f"incomplete final probe checkpoint: {path}")
             for key in ("model", "dataset", "method", "split_sha256", "embedding_sha256"):
                 if identity[key] != binding[key]: raise ValueError("checkpoint/binding mismatch " + key)
             # Only explicitly audited candidate-validation checkpoints are accepted.
@@ -45,25 +61,39 @@ def export_checkpoints(paths, binding, output):
             concept = np.asarray(data["concept"], dtype=np.float64)
             val = float(data["validation_accuracy"])
         layer = int(identity["layer"])
-        if layer in rows or concept.ndim != 1 or len(concept) < 2: raise ValueError("duplicate or invalid probe")
+        if layer != filename_layer:
+            raise ValueError(f"checkpoint filename/identity layer mismatch: {path}")
+        count, dim = identity.get("embedding_layers"), identity.get("embedding_dim")
+        if type(count) is not int or count < 3 or type(dim) is not int or dim < 1:
+            raise ValueError("checkpoint requires physical embedding_layers and embedding_dim")
+        validate_layer_set(identity["model"], range(count), synthetic=identity.get("scope") == "synthetic")
+        if concept.ndim != 1 or concept.shape != (dim + 1,):
+            raise ValueError(f"probe dimension does not match embedding_dim: {path}")
+        if layer in rows: raise ValueError("duplicate probe layer")
         rows[layer] = (concept, val)
         sources.append(dict(path=str(path), sha256=file_hash(path)))
         identities.append(identity)
-    if set(rows) != set(range(len(rows))) or len(rows) < 3: raise ValueError("complete physical layer set required")
     base = {k:v for k,v in identities[0].items() if k != "layer"}
     if any({k:v for k,v in identity.items() if k != "layer"} != base for identity in identities):
         raise ValueError("mixed probe identities")
-    arrays = dict(W=np.stack([rows[i][0][:-1] for i in range(len(rows))]),
-                  B=np.asarray([rows[i][0][-1] for i in range(len(rows))]),
-                  val_acc_pre_refit=np.asarray([rows[i][1] for i in range(len(rows))]))
+    layers = list(range(base["embedding_layers"]))
+    if set(rows) != set(layers):
+        raise ValueError(f"complete physical layer set required: expected {len(layers)}, "
+                         f"missing={sorted(set(layers) - set(rows))}, extra={sorted(set(rows) - set(layers))}")
+    arrays = dict(W=np.stack([rows[i][0][:-1] for i in layers]),
+                  B=np.asarray([rows[i][0][-1] for i in layers]),
+                  val_acc_pre_refit=np.asarray([rows[i][1] for i in layers]))
     metadata = dict(binding, schema="raptor.steering.own_probe.v1", validation_source="pre_refit_train_only",
                     source_identity=base, sources=sources)
     save(output, arrays, metadata)
 
 
 def fit_caa(embedding, split, binding, output):
+    from raptor.experiments.accuracy_preparation import inspect_embedding
     from .scalar_calibration import fit_mean_difference
     from .gcav import select_active_layers
+    inspected = inspect_embedding(Path(embedding), binding["model"], binding["dataset"],
+                                  synthetic=binding.get("scope") == "synthetic")
     if file_hash(embedding) != binding["embedding_sha256"]: raise ValueError("embedding SHA mismatch")
     with np.load(split, allow_pickle=False) as data:
         split_meta = json.loads(str(data["metadata_json"].item()))
@@ -71,8 +101,7 @@ def fit_caa(embedding, split, binding, output):
         tr, val = data["train_sub_idx"], data["val_idx"]
     candidates, validation = [], []
     with np.load(embedding, allow_pickle=False) as data:
-        layers = sorted(int(k.rsplit("_", 1)[-1]) for k in data.files if k.startswith("X_pos_"))
-        if layers != list(range(len(layers))): raise ValueError("complete physical layers required")
+        layers = list(range(inspected["layers"]))
         for layer in layers:
             pos, neg = data[f"X_pos_{layer}"], data[f"X_neg_{layer}"]
             hidden = np.vstack([pos,neg]); labels=np.r_[np.ones(len(pos)),np.zeros(len(neg))]

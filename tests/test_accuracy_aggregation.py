@@ -19,10 +19,10 @@ from raptor.experiments.accuracy_multiseed import (
 
 class AccuracyAggregationTest(unittest.TestCase):
     def fixture(self, tmp: Path, seeds=(42, 43, 44, 45, 46)):
-        embedding = {"model": "model", "dataset": "STSA",
+        embedding = {"scope": "synthetic", "model": "model", "dataset": "STSA",
                      "path": str(tmp / "model_STSA_embeddings.npz"),
                      "sha256": "emb-sha", "layers": 2, "n_pos": 20, "n_neg": 20, "dim": 4}
-        manifest = {"schema_version": 1, "experiment": "test",
+        manifest = {"scope": "synthetic", "schema_version": 1, "experiment": "test",
                     "protocol": {"outer_seeds": list(seeds), "tie_rule": "lowest layer index",
                                  "test_size": .2, "val_size_within_non_test": .2},
                     "grid": {"active_models": ["model"], "datasets": ["STSA"], "methods": ["singlelr", "xrfm", "gcs"], "blocked": []},

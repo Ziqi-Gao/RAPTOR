@@ -123,6 +123,7 @@ class AccuracyMultiseedProtocolTest(unittest.TestCase):
             )
             stat = emb_path.stat()
             embedding = {
+                "scope": "synthetic",
                 "path": str(emb_path),
                 "size": stat.st_size,
                 "mtime_ns": stat.st_mtime_ns,
@@ -226,6 +227,7 @@ class AccuracyMultiseedProtocolTest(unittest.TestCase):
             )
             stat = emb_path.stat()
             embedding = {
+                "scope": "synthetic",
                 "path": str(emb_path),
                 "size": stat.st_size,
                 "mtime_ns": stat.st_mtime_ns,

@@ -15,6 +15,7 @@ import numpy as np
 from numpy.lib import format as npy_format
 
 from raptor.core import DEFAULT_DATASETS, DEFAULT_MODELS, model_tag
+from raptor.embedding_cache import EXPECTED_LAYERS
 from raptor.experiments.accuracy_multiseed import (
     DEFAULT_OUTER_SEEDS,
     GROUPED_PROTOCOL,
@@ -46,7 +47,64 @@ def _npy_shape(npz: np.lib.npyio.NpzFile, key: str) -> tuple[tuple[int, ...], np
     return tuple(int(value) for value in shape), np.dtype(dtype)
 
 
-def inspect_embedding(path: Path, model: str, dataset: str) -> dict[str, Any]:
+def validate_layer_set(model: str, layers: Iterable[int], *, synthetic: bool = False) -> None:
+    """Require the physical model inventory, independent of a cache's own claims.
+
+    Historical caches may lack metadata, but a known model still has a fixed
+    physical layer count. Custom tiny inputs require explicit synthetic scope;
+    that scope never shortens a known benchmark model.
+    """
+    layers = list(layers)
+    expected = EXPECTED_LAYERS.get(model)
+    if expected is not None:
+        if layers != list(range(expected)):
+            raise ValueError(f"{model}: expected all {expected} physical layers")
+    elif not synthetic:
+        raise ValueError(f"unknown model {model!r}: explicit synthetic scope is required")
+    elif not layers or layers != list(range(len(layers))):
+        raise ValueError("synthetic cache requires consecutive matching layers from zero")
+
+
+def validate_embedding_metadata(data, *, model: str, dataset: str, layers: int, dim: int) -> None:
+    """Check existing scalar metadata without loading large layer arrays."""
+    for key, expected in (("meta_model", model), ("meta_dataset", dataset),
+                          ("meta_layers", layers), ("meta_dim", dim)):
+        if key not in data.files:
+            continue  # Older benchmark inputs are bound by the explicit model.
+        value = np.asarray(data[key])
+        if value.size != 1 or value.reshape(-1)[0].item() != expected:
+            raise ValueError(f"{key} differs from the requested model/dataset or actual cache layout")
+    if "meta_identity_json" in data.files:
+        identity = json.loads(np.asarray(data["meta_identity_json"]).item())
+        if identity.get("model") != model or identity.get("dataset") != dataset:
+            raise ValueError("extraction model/dataset identity differs")
+
+
+def validate_embedding_record(embedding, *, model: str, dataset: str,
+                              synthetic: bool = False) -> None:
+    """Reject shortened formal inventories even in an old prepared manifest."""
+    for key, expected in (("model", model), ("dataset", dataset)):
+        if key in embedding and embedding[key] != expected:
+            raise ValueError(f"prepared embedding {key} identity differs")
+    count = embedding["layers"]
+    if type(count) is not int or count < 1:
+        raise ValueError("prepared embedding layer count must be a positive integer")
+    validate_layer_set(model, range(count), synthetic=synthetic)
+
+
+def verify_prepared_embedding(embedding, *, model: str, dataset: str,
+                              synthetic: bool = False) -> None:
+    """Check headers/metadata against a prepared record, without another hash."""
+    validate_embedding_record(embedding, model=model, dataset=dataset, synthetic=synthetic)
+    observed = inspect_embedding(Path(embedding["path"]), model, dataset,
+                                 synthetic=synthetic, hash_content=False)
+    for key in ("layers", "n_pos", "n_neg", "dim"):
+        if observed[key] != embedding[key]:
+            raise ValueError(f"prepared embedding {key} differs from actual cache")
+
+
+def inspect_embedding(path: Path, model: str, dataset: str, *, synthetic: bool = False,
+                      hash_content: bool = True) -> dict[str, Any]:
     if not path.is_file():
         raise FileNotFoundError(f"missing embedding: {path}")
     try:
@@ -65,6 +123,7 @@ def inspect_embedding(path: Path, model: str, dataset: str) -> dict[str, Any]:
                 raise ValueError(f"non-contiguous positive layers in {path}")
             if pos_layers != neg_layers:
                 raise ValueError(f"positive/negative layer mismatch in {path}")
+            validate_layer_set(model, pos_layers, synthetic=synthetic)
             n_pos = n_neg = dim = None
             dtype_names: set[str] = set()
             for layer in pos_layers:
@@ -87,6 +146,10 @@ def inspect_embedding(path: Path, model: str, dataset: str) -> dict[str, Any]:
                 raise ValueError(f"empty embedding: {path}")
             if min(n_pos, n_neg) < 2:
                 raise ValueError(f"embedding has insufficient class rows: {path}")
+            if dim < 1 or not all(np.issubdtype(np.dtype(name), np.floating) for name in dtype_names):
+                raise ValueError("embedding requires nonempty floating-point feature arrays")
+            validate_embedding_metadata(data, model=model, dataset=dataset,
+                                        layers=len(pos_layers), dim=dim)
     except (OSError, ValueError, KeyError) as exc:
         raise ValueError(f"invalid embedding {path}: {exc}") from exc
     stat = path.stat()
@@ -96,7 +159,8 @@ def inspect_embedding(path: Path, model: str, dataset: str) -> dict[str, Any]:
         "dataset": dataset,
         "size": int(stat.st_size),
         "mtime_ns": int(stat.st_mtime_ns),
-        "sha256": file_sha256(path),
+        **({"sha256": file_sha256(path)} if hash_content else {}),
+        "scope": "synthetic" if synthetic else "benchmark",
         "layers": len(pos_layers),
         "n_pos": int(n_pos),
         "n_neg": int(n_neg),
@@ -159,6 +223,8 @@ def main() -> None:
         default=Path("logs/accuracy_tasks"),
     )
     parser.add_argument("--models", default="all")
+    parser.add_argument("--synthetic-canary", action="store_true",
+                        help="Explicitly label custom tiny inputs; never shortens a benchmark model.")
     parser.add_argument("--datasets", default="all")
     parser.add_argument(
         "--seeds",
@@ -209,9 +275,9 @@ def main() -> None:
     unknown_models = set(models).difference(DEFAULT_MODELS)
     unknown_datasets = set(datasets).difference(DEFAULT_DATASETS)
     unknown_skips = skip_models.difference(models)
-    if unknown_models:
+    if unknown_models and not args.synthetic_canary:
         raise ValueError(f"unknown models: {sorted(unknown_models)}")
-    if unknown_datasets:
+    if unknown_datasets and not args.synthetic_canary:
         raise ValueError(f"unknown datasets: {sorted(unknown_datasets)}")
     if unknown_skips:
         raise ValueError(f"--skip-models not selected: {sorted(unknown_skips)}")
@@ -232,6 +298,7 @@ def main() -> None:
                 path,
                 model,
                 dataset,
+                synthetic=args.synthetic_canary,
             )
     if missing:
         details = "\n".join(
@@ -332,6 +399,7 @@ def main() -> None:
                         else "planned"
                     )
                     new_run_meta = {
+                        "scope": "synthetic" if args.synthetic_canary else "benchmark",
                         "schema_version": 1,
                         "status": preserve_status,
                         "experiment": "Table 1 five-outer-seed rebuttal",
@@ -364,6 +432,7 @@ def main() -> None:
                             method_chunk_sizes[method],
                         ):
                             task = {
+                                "scope": "synthetic" if args.synthetic_canary else "benchmark",
                                 "schema_version": 1,
                                 "protocol": protocol,
                                 "model": model,
@@ -422,6 +491,7 @@ def main() -> None:
         for model in sorted(skip_models)
     ]
     manifest = {
+        "scope": "synthetic" if args.synthetic_canary else "benchmark",
         "schema_version": 1,
         "status": "validated",
         "experiment": "Table 1 five-outer-seed rebuttal",

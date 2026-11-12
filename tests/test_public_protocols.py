@@ -3,6 +3,7 @@ from __future__ import annotations
 
 import copy
 import json
+import sys
 from pathlib import Path
 from unittest import mock
 
@@ -101,7 +102,7 @@ def tiny_task(tmp_path, *, method="fixed_reg", max_iter=1):
     X, y = synthetic()
     emb = tmp_path / "tiny_STSA_embeddings.npz"
     np.savez(emb, X_pos_0=X[y == 1], X_neg_0=X[y == 0])
-    embedding = inspect_embedding(emb, "tiny", "STSA")
+    embedding = inspect_embedding(emb, "tiny", "STSA", synthetic=True)
     return {"protocol": robustness.PROTOCOL, "model": "tiny", "dataset": "STSA", "layer": 0,
         "method": method, "seed": 42, "runs": 2, "drop_fraction": .2, "test_size": .2, "val_size": .2,
         "hyperparameters": {**accuracy.METHOD_HPARAMETERS[method], "max_iter": max_iter} if method != "caa" else {"direction": "raw_mean_difference"},
@@ -111,9 +112,9 @@ def tiny_task(tmp_path, *, method="fixed_reg", max_iter=1):
 
 def manifest_for(task):
     return {"schema": "public_robustness_v1", "protocol": robustness.PROTOCOL, "models": ["tiny"],
-        "datasets": ["STSA"], "methods": [task["method"]], "runs": 2, "seed": 42,
+        "datasets": ["STSA"], "methods": [task["method"]], "runs": task["runs"], "seed": 42,
         "code_version": task["code_version"], "environment": {"sha256": "fixture-environment"},
-        "tasks": [task], "n_layers": 1, "n_direction_units": 2,
+        "tasks": [task], "n_layers": 1, "n_direction_units": task["runs"],
         "coordinates": {task["method"]: robustness.COORDINATES[task["method"]]},
         "historical_pairing": "not verified", "synthetic_smoke": True}
 
@@ -123,9 +124,11 @@ def test_real_finite_budget_checkpoint_resume_and_complete_aggregation(tmp_path)
     with mock.patch.object(robustness, "environment_identity", return_value={"sha256": "fixture-environment"}):
         computed = robustness.run_layer(task)
         assert computed["computed"] == 2
+        original = {path.name: path.read_bytes() for path in Path(task["output_dir"]).glob("*.npz")}
         with mock.patch.object(robustness, "_run_native", side_effect=AssertionError("resume must not fit again")):
             restored = robustness.run_layer(task)
         assert restored["restored"] == 2
+        assert original == {path.name: path.read_bytes() for path in Path(task["output_dir"]).glob("*.npz")}
     # max_iter1 final fits are deliberately retained as real finite-budget outputs.
     summary = robustness.aggregate(manifest_for(task), output=tmp_path / "summary.json")
     assert summary["status"] == "complete_with_nonconvergence"
@@ -141,6 +144,179 @@ def test_real_finite_budget_checkpoint_resume_and_complete_aggregation(tmp_path)
     incomplete = robustness.aggregate(manifest_for(task), output=tmp_path / "incomplete.json")
     assert incomplete["status"] == "incomplete"
     assert incomplete["settings"][0]["Mean"] is None
+
+
+def test_robustness_resume_retries_only_technical_error_with_same_indices(tmp_path):
+    task = tiny_task(tmp_path, method="caa")
+    task["runs"] = 20
+    native = robustness._run_native
+    attempts = []
+
+    def fail_once(*args, **kwargs):
+        attempts.append({key: value.copy() for key, value in args[3].items()})
+        if len(attempts) == 1:
+            raise OSError("injected transient storage failure")
+        return native(*args, **kwargs)
+
+    with mock.patch.object(robustness, "environment_identity", return_value={"sha256": "fixture-environment"}):
+        with mock.patch.object(robustness, "_run_native", side_effect=fail_once):
+            first = robustness.run_layer(task)
+        assert first["computed"] == 20
+        assert first["errors"] == first["invalid_directions"] == 1
+        path = Path(task["output_dir"]) / "run_00.npz"
+        error_bytes = path.read_bytes()
+        successful = {p.name: p.read_bytes() for p in path.parent.glob("run_*.npz") if p != path}
+        incomplete = robustness.aggregate(manifest_for(task), output=tmp_path / "incomplete.json")
+        assert incomplete["status"] == "incomplete"
+        with mock.patch.object(robustness, "_run_native", wraps=native) as retry:
+            resumed = robustness.run_layer(task)
+        assert resumed["computed"] == 1
+        assert resumed["restored"] == 19
+        assert resumed["errors"] == 0
+        assert resumed["retried_errors"] == 1
+        assert retry.call_count == 1
+        for key, expected in attempts[0].items():
+            np.testing.assert_array_equal(retry.call_args.args[3][key], expected)
+        assert retry.call_args.kwargs["native_seed"] == 42
+        with np.load(path, allow_pickle=False) as data:
+            meta = json.loads(data["metadata_json"].item())
+            assert meta["status"] == "complete"
+            assert meta["identity"]["run"] == 0
+        history = list(path.parent.glob("run_00.npz.error.*"))
+        assert len(history) == 1 and history[0].read_bytes() == error_bytes
+        assert successful == {p.name: p.read_bytes() for p in path.parent.glob("run_*.npz") if p != path}
+        complete = robustness.aggregate(manifest_for(task), output=tmp_path / "complete.json")
+        assert complete["status"] == "complete"
+        assert complete["layers"][0]["n_pairs"] == 190
+        with mock.patch.object(robustness, "_run_native", side_effect=AssertionError("completed units must restore")):
+            assert robustness.run_layer(task)["restored"] == 20
+
+
+def test_robustness_cli_reports_execution_error_and_plain_resume_recovers(tmp_path, monkeypatch, capsys):
+    task = tiny_task(tmp_path, method="caa")
+    manifest_path = tmp_path / "manifest.json"
+    manifest_path.write_text(json.dumps(manifest_for(task)))
+    monkeypatch.setattr(sys, "argv", ["run_robustness.py", "run", "--manifest", str(manifest_path)])
+    native = robustness._run_native
+
+    def unavailable(*args, **kwargs):
+        if kwargs["native_seed"] == 42:
+            raise OSError("storage unavailable")
+        return native(*args, **kwargs)
+
+    with mock.patch.object(robustness, "environment_identity", return_value={"sha256": "fixture-environment"}):
+        for _ in range(2):
+            with mock.patch.object(robustness, "_run_native", side_effect=unavailable):
+                with pytest.raises(SystemExit) as stopped:
+                    robustness.main()
+            assert stopped.value.code == 2
+        assert "resume" in capsys.readouterr().err.lower()
+        with mock.patch.object(robustness, "_run_native", wraps=native) as retry:
+            robustness.main()
+        assert retry.call_count == 1
+    assert len(list(Path(task["output_dir"]).glob("run_00.npz.error.*"))) == 2
+    assert robustness.aggregate(manifest_for(task), output=tmp_path / "summary.json")["status"] == "complete"
+
+
+@pytest.mark.parametrize("status", ["degenerate", "nonfinite"])
+def test_robustness_scientific_invalid_directions_restore_without_retry(tmp_path, status):
+    task = tiny_task(tmp_path, method="caa")
+    # Native CAA returns a zero direction or a genuine finite direction whose
+    # float64 norm overflows. Neither is an execution exception or a retry cue.
+    value = 0.0 if status == "degenerate" else 1e154
+    embedding = Path(task["embedding"]["path"])
+    np.savez(embedding, X_pos_0=np.full((80, 4), value), X_neg_0=np.full((80, 4), -value))
+    task["embedding"] = inspect_embedding(embedding, "tiny", "STSA", synthetic=True)
+    with mock.patch.object(robustness, "environment_identity", return_value={"sha256": "fixture-environment"}):
+        first = robustness.run_layer(task)
+        assert first["errors"] == 0 and first["invalid_directions"] == 2
+        original = {path.name: path.read_bytes() for path in Path(task["output_dir"]).glob("*.npz")}
+        with mock.patch.object(robustness, "_run_native", side_effect=AssertionError("scientific outcome must restore")):
+            resumed = robustness.run_layer(task)
+        assert resumed["computed"] == resumed["retried_errors"] == resumed["errors"] == 0
+        assert resumed["restored"] == resumed["invalid_directions"] == 2
+        assert original == {path.name: path.read_bytes() for path in Path(task["output_dir"]).glob("*.npz")}
+    with np.load(Path(task["output_dir"]) / "run_00.npz", allow_pickle=False) as data:
+        assert json.loads(data["metadata_json"].item())["status"] == status
+    summary = robustness.aggregate(manifest_for(task), output=tmp_path / "incomplete.json")
+    assert summary["status"] == "incomplete"
+    assert summary["settings"][0]["Mean"] is None
+
+
+def test_robustness_refit_error_retry_reuses_frozen_candidate(tmp_path):
+    from raptor.experiments import run_raptor
+    task = tiny_task(tmp_path)
+    native_refit = run_raptor.refit_raptor_layer
+    attempts = 0
+
+    def fail_once(*args, **kwargs):
+        nonlocal attempts
+        attempts += 1
+        if attempts == 1:
+            raise OSError("injected refit execution failure")
+        return native_refit(*args, **kwargs)
+
+    with mock.patch.object(robustness, "environment_identity", return_value={"sha256": "fixture-environment"}):
+        with mock.patch.object(run_raptor, "refit_raptor_layer", side_effect=fail_once):
+            assert robustness.run_layer(task)["errors"] == 1
+        candidate = Path(task["output_dir"]) / "candidate_00.npz"
+        original = candidate.read_bytes()
+        with mock.patch.object(run_raptor, "fit_raptor_layer", side_effect=AssertionError("candidate must stay frozen")):
+            resumed = robustness.run_layer(task)
+        assert resumed["computed"] == resumed["restored"] == resumed["retried_errors"] == 1
+        assert resumed["errors"] == resumed["invalid_directions"] == 0
+        assert candidate.read_bytes() == original
+    summary = robustness.aggregate(manifest_for(task), output=tmp_path / "summary.json")
+    assert summary["status"] == "complete_with_nonconvergence"
+    assert summary["settings"][0]["nonconverged_directions"] == 2
+
+
+@pytest.mark.parametrize("phase", ["run", "candidate"])
+def test_robustness_resume_rejects_truncated_zip_and_preserves_other_outcomes(tmp_path, phase):
+    from raptor.experiments import run_raptor
+
+    task = tiny_task(tmp_path)
+    native = robustness._run_native
+    native_refit = run_raptor.refit_raptor_layer
+    refit_attempts = 0
+
+    def fail_first_refit(*args, **kwargs):
+        nonlocal refit_attempts
+        refit_attempts += 1
+        if phase == "candidate" and refit_attempts == 1:
+            raise OSError("injected refit failure before candidate corruption")
+        return native_refit(*args, **kwargs)
+
+    with mock.patch.object(robustness, "environment_identity", return_value={"sha256": "fixture-environment"}):
+        with mock.patch.object(robustness, "_run_native", wraps=native) as first_native:
+            with mock.patch.object(run_raptor, "refit_raptor_layer", side_effect=fail_first_refit):
+                first = robustness.run_layer(task)
+        assert first["computed"] == 2
+        assert first["errors"] == int(phase == "candidate")
+        expected_call = first_native.call_args_list[0]
+        output = Path(task["output_dir"])
+        damaged = output / ("run_00.npz" if phase == "run" else "candidate_00.npz")
+        damaged_bytes = damaged.read_bytes()[:-10]
+        damaged.write_bytes(damaged_bytes)
+        # All other scientific outcomes, including the finite nonconverged
+        # run_01 direction, must survive this storage repair byte for byte.
+        stable = {path.name: path.read_bytes() for path in output.glob("*.npz")
+                  if path not in {damaged, output / "run_00.npz"}}
+        with mock.patch.object(robustness, "_run_native", wraps=native) as retry:
+            resumed = robustness.run_layer(task)
+        assert resumed["computed"] == resumed["restored"] == 1
+        assert resumed["errors"] == resumed["invalid_directions"] == 0
+        assert retry.call_count == 1
+        assert retry.call_args.kwargs["identity"] == expected_call.kwargs["identity"]
+        assert retry.call_args.kwargs["native_seed"] == expected_call.kwargs["native_seed"] == 42
+        for key, expected in expected_call.args[3].items():
+            np.testing.assert_array_equal(retry.call_args.args[3][key], expected)
+        rejected = list(output.glob(damaged.name + ".rejected.*"))
+        assert len(rejected) == 1 and rejected[0].read_bytes() == damaged_bytes
+        assert all((output / name).read_bytes() == contents for name, contents in stable.items())
+    summary = robustness.aggregate(manifest_for(task), output=tmp_path / "summary.json")
+    assert summary["status"] == "complete_with_nonconvergence"
+    assert summary["settings"][0]["nonconverged_directions"] == 2
 
 
 def test_robustness_rejects_layer_grid_pruning_and_source_mixing(tmp_path):

@@ -811,6 +811,8 @@ def _checkpoint_identity(
     method = str(task["method"])
     return {
         "schema_version": SCHEMA_VERSION,
+        **({"scope": task.get("scope", task["embedding"].get("scope"))}
+           if task.get("scope", task["embedding"].get("scope")) is not None else {}),
         "validation_protocol_version": VALIDATION_PROTOCOL_VERSION,
         "protocol": task["protocol"],
         "model": task["model"],
@@ -890,6 +892,9 @@ def _reject_checkpoint(path: Path) -> None:
 
 
 def _embedding_stat_matches(task: Mapping[str, Any]) -> Path:
+    from raptor.experiments.accuracy_preparation import verify_prepared_embedding
+    verify_prepared_embedding(task["embedding"], model=task["model"], dataset=task["dataset"],
+                              synthetic=task.get("scope", task["embedding"].get("scope")) == "synthetic")
     path = Path(task["embedding"]["path"])
     stat = path.stat()
     if int(stat.st_size) != int(task["embedding"]["size"]):

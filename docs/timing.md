@@ -12,6 +12,12 @@ Each task runs all five methods in a deterministic rotated order. Input rows
 remain positive then negative, matching the embedding cache. Shared rowwise
 outer splits have approximately64/16/20% train/validation/test.
 
+Preparation, validation, execution and aggregation check the benchmark model's
+fixed physical layer inventory. A shortened cache or manifest cannot override
+that inventory, even in synthetic scope. Existing cache model/dataset/layer-count
+and dimension metadata must also agree; a complete metadata-free legacy cache
+remains supported.
+
 ## Native procedures and budgets
 
 | Method | Native work inside each measured layer | Final fit |

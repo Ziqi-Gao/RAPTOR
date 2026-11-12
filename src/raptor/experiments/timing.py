@@ -26,6 +26,7 @@ from threadpoolctl import threadpool_info, threadpool_limits
 
 from raptor.core import model_tag
 from raptor.experiments import accuracy_multiseed as accuracy
+from raptor.experiments.accuracy_preparation import validate_layer_set, validate_embedding_metadata
 
 SCHEMA = "raptor.unified_timing.v1"
 METHODS = ("singlelr", "xrfm", "gcs", "fixed_reg", "dim_midpoint")
@@ -103,7 +104,7 @@ def dependency_identity():
     return {"distribution": importlib.metadata.version("xrfm"), "python_source_sha256": digest(files)}
 
 
-def embedding_headers(path):
+def embedding_headers(path, *, model, dataset, synthetic=False):
     headers = {}
     with zipfile.ZipFile(path) as archive:
         for name in archive.namelist():
@@ -117,6 +118,7 @@ def embedding_headers(path):
     negative = sorted(int(k[6:]) for k in headers if k.startswith("X_neg_"))
     if positive != negative or positive != list(range(len(positive))) or not positive:
         raise ValueError("embedding cache requires complete consecutive matching positive/negative layers")
+    validate_layer_set(model, positive, synthetic=synthetic)
     first = headers["X_pos_0"]["shape"]
     npos, width = first if len(first) == 2 else (0, 0)
     neg = headers["X_neg_0"]["shape"]
@@ -127,6 +129,8 @@ def embedding_headers(path):
         for prefix, count in (("X_pos_", npos), ("X_neg_", nneg)):
             if headers[prefix + str(layer)] != {"shape": [count, width], "dtype": "float32"}:
                 raise ValueError("all native layers require consistent raw float32 shapes")
+    with np.load(path, allow_pickle=False) as archive:
+        validate_embedding_metadata(archive, model=model, dataset=dataset, layers=len(positive), dim=width)
     return {"layers": positive, "n_positive": npos, "n_negative": nneg, "width": width}
 
 
@@ -151,7 +155,7 @@ def prepare_manifest(config, embeddings, output, *, scope="full", run_id=None):
         for dataset in datasets:
             path = Path(embeddings) / f"{model_tag(model)}_{dataset}_embeddings.npz"
             before = path.stat()
-            headers = embedding_headers(path)
+            headers = embedding_headers(path, model=model, dataset=dataset, synthetic=scope == "synthetic")
             expected = config.get("layer_counts", {}).get(model)
             if expected is not None and len(headers["layers"]) != expected:
                 raise ValueError(f"{model}/{dataset}: expected all {expected} physical layers")
@@ -170,7 +174,8 @@ def prepare_manifest(config, embeddings, output, *, scope="full", run_id=None):
                     test_size=.2, val_size=.2, model=model, dataset=dataset, embedding=emb)
                 splits.append({"seed": seed, "path": relative(split_path, output),
                                "sha256": file_sha(split_path), "identity_sha256": meta["split_sha256"]})
-            settings.append({"model": model, "dataset": dataset, "embedding": emb, "splits": splits})
+            settings.append({"model": model, "dataset": dataset, "scope": scope,
+                             "embedding": emb, "splits": splits})
     manifest = {"schema": SCHEMA, "scope": scope, "run_id": run_id or uuid.uuid4().hex,
                 "source": source_identity(), "release_version": release_version(),
                 "dependency": dependency_identity(), "methods": list(METHODS), "seeds": seeds,
@@ -204,8 +209,9 @@ def validate_manifest(manifest, *, current_source=True):
     paths = set()
     for setting in manifest["settings"]:
         layers = setting["embedding"]["layers"]
-        if layers != list(range(len(layers))) or not layers:
-            raise ValueError("incomplete physical layer set")
+        validate_layer_set(setting["model"], layers, synthetic=manifest["scope"] == "synthetic")
+        if setting.get("scope", "full") != manifest["scope"]:
+            raise ValueError("setting scope differs from timing manifest")
         if [s["seed"] for s in setting["splits"]] != manifest["seeds"]:
             raise ValueError("missing or reordered seed split")
         for split in setting["splits"]:
@@ -345,7 +351,8 @@ def load_layer(root, setting, split, layer, *, verify_embedding=True):
     start = time.perf_counter_ns()
     if verify_embedding and file_sha(path) != emb["sha256"]:
         raise ValueError("embedding content identity changed")
-    if embedding_headers(path) != {k: emb[k] for k in ("layers", "n_positive", "n_negative", "width")}:
+    if embedding_headers(path, model=setting["model"], dataset=setting["dataset"],
+                         synthetic=setting.get("scope") == "synthetic") != {k: emb[k] for k in ("layers", "n_positive", "n_negative", "width")}:
         raise ValueError("embedding dimensions changed")
     with np.load(path, allow_pickle=False) as archive:
         X = np.vstack([archive[f"X_pos_{layer}"], archive[f"X_neg_{layer}"]])
@@ -582,7 +589,7 @@ def plan_grid(config, embeddings):
     for model in config["models"]:
         for dataset in config["datasets"]:
             path = Path(embeddings) / f"{model_tag(model)}_{dataset}_embeddings.npz"
-            header = embedding_headers(path)
+            header = embedding_headers(path, model=model, dataset=dataset)
             expected = config["layer_counts"][model]
             if header["layers"] != list(range(expected)):
                 raise ValueError(f"incomplete physical layers: {model}/{dataset}")

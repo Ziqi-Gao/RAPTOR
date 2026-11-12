@@ -28,6 +28,14 @@ incompatible checkpoints are preserved with a `.rejected.*` suffix before a
 recomputation. Signals are observed after a completed atomic layer checkpoint;
 the CLI exits 75 so a scheduler may resume explicitly. No job is submitted.
 
+Preparation, execution and aggregation require the fixed physical layer count
+of each benchmark model. A consecutive prefix is incomplete even if a manifest
+or cache declares that shorter count. Existing model, dataset, layer-count and
+feature-dimension metadata must match the actual input. Metadata-free historical
+caches still require all physical layers. Tiny custom offline fixtures require
+`--synthetic-canary`; this labels their manifests/results and cannot shorten a
+known benchmark model.
+
 Splits are stratified by row: 20% test, then 20% of the remainder validation
 (approximately 64/16/20). Every method shares the exact stored indices in one
 model–dataset–seed setting. Class blocks in embeddings remain positive first,

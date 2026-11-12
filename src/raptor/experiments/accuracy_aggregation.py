@@ -153,9 +153,13 @@ def _atomic_csv(path: Path, rows: list[dict[str, Any]]) -> None:
 
 def _frozen_tasks(manifest: Mapping[str, Any]) -> dict[tuple, Mapping[str, Any]]:
     """Read scientific identities from the frozen task files, never from CPs."""
+    from raptor.experiments.accuracy_preparation import validate_embedding_record
     if not manifest.get("task_files") or not manifest.get("environment", {}).get("sha256"):
         raise ValueError("aggregation requires frozen task_files and environment identity")
     embeddings = {(e["model"], e["dataset"]): e for e in manifest["embeddings"]}
+    for embedding in embeddings.values():
+        validate_embedding_record(embedding, model=embedding["model"], dataset=embedding["dataset"],
+                                  synthetic=manifest.get("scope") == "synthetic")
     tasks: dict[tuple, Mapping[str, Any]] = {}
     for entry in manifest["task_files"].values():
         path = Path(entry["path"])
@@ -175,6 +179,7 @@ def _frozen_tasks(manifest: Mapping[str, Any]) -> dict[tuple, Mapping[str, Any]]
                 continue
             method = task["method"]
             if (task.get("schema_version") != manifest.get("schema_version", 1)
+                    or task.get("scope", task["embedding"].get("scope", "benchmark")) != manifest.get("scope", "benchmark")
                     or method not in protocol_methods(manifest, task["protocol"]) or entry.get("method", method) != method
                     or task["protocol"] not in (ROW_PROTOCOL, GROUPED_PROTOCOL)
                     or task["code_version"] != manifest["code_version"]
@@ -582,6 +587,7 @@ def aggregate_accuracy(
     )
     payload = {
         "schema_version": 1,
+        "scope": manifest.get("scope", "benchmark"),
         "status": status,
         "experiment": manifest["experiment"],
         "generated_at": time.strftime("%Y-%m-%dT%H:%M:%S%z"),

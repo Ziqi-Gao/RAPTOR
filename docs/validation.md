@@ -5,7 +5,54 @@ reported summaries. No complete scientific benchmark was rerun. Compact results
 and evidence digests are saved in [validation/evidence.json](validation/evidence.json).
 Raw logs, caches, generated text and machine paths are excluded from this report.
 
-## Installed package and environment
+## Current PR review fixes and fresh validation
+
+The four review findings on commit `5a6971d7e08b6e223c76df981c46a837465b9b44`
+were checked again after the saved fixes were recovered. The final source rejects
+incomplete benchmark layer inventories in accuracy, robustness and timing;
+steering export excludes selection snapshots while requiring complete final
+checkpoints with a consistent model identity, physical layer set and dimensions.
+Robustness retains technical-error history and retries the same unit identity;
+finite nonconverged outcomes remain unchanged. Truncated final/candidate NPZ
+recovery now also archives the damaged bytes before repair.
+
+Fresh local validation used the current checkout's source explicitly through
+`PYTHONPATH`, with resolved import paths checked, Python 3.9.21 and the existing
+numerical dependency environment. It did not use the earlier review snapshot or
+claim a new isolated wheel installation. The scientific source digest from
+`accuracy_multiseed.source_version()` is
+`c94b141cb36354aa074416b1b20a883dbadd7cd46c3c91cb371184a749b6f683`.
+The separately defined timing source digest and compact results are recorded in
+[review_fixes.json](validation/review_fixes.json).
+
+- Full current suite: **132 passed, 2 warnings in 36.42 seconds**. The warnings
+  are the fontTools `py23` deprecation and undefined ROC AUC for a deliberate
+  single-class xRFM test fixture.
+- Regression coverage includes actual public CLI rejection of shortened caches
+  and manifests; the documented Bash steering glob against real RAPTOR fits;
+  incomplete/mixed/damaged final checkpoints; technical-error retries with
+  identical seeds and ordered indices; frozen-candidate reuse; and unchanged
+  finite nonconverged outcomes. Two truncated-NPZ recovery cases first failed
+  against the recovered code and passed after the minimal exception fix.
+- Five-method timing canary: **50 computed, then 50 restored and zero recomputed**,
+  two layers, seeds 42–46, all native fitting budgets. Strict aggregation and
+  PNG/PDF/SVG exports succeeded.
+- Additional real timing recovery: SIGUSR1 at native GCS entry allowed the
+  active method to finish and flush three records; resume restored those three
+  and computed the remaining two. A corrupted CAA checksum was archived and
+  only that unit recomputed; the other four records were byte-identical.
+- Reported-result recomputation: **420 accuracy summaries and 288 paired
+  comparisons**, without training. Python syntax parsing and `git diff --check`
+  passed.
+
+These are fresh checks of the review fixes. The packaging, manuscript, inventory
+and earlier canary records below describe earlier source revisions; their prior
+91-test results are not substituted for the current 132-test run. Current remote
+CI is linked from the PR after its new commit is pushed. No full benchmark,
+model extraction/generation, judge call, manuscript change or Slurm operation
+was performed. Author-code licensing remains pending.
+
+## Earlier installed package and environment checks
 
 The archived Git index tree `cb326684168d3ea6e10fed373bc8a9c718e52de1` was used to
 build `raptor-probes 0.2.0`. This audit documentation was added afterward. The wheel

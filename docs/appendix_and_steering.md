@@ -51,9 +51,13 @@ python scripts/steer.py \
   --prompts MY_PROMPTS.jsonl --out outputs/steering/new_run
 ```
 
+The shell expands `layer_*.npz` to final `layer_<integer>.npz` checkpoints and any retained `layer_<integer>.selection.npz` snapshots. Export explicitly reports and excludes only those selection snapshots. Every final checkpoint must still be complete, share its run identity, match its filename and embedding dimension, and cover every physical layer declared by that identity. Known benchmark models are also checked against their fixed model layer count; a completed prefix or shard is rejected. Finish the missing accuracy tasks before exporting. Do not remove an incomplete or damaged final file to hide an export error.
+
 `MY_PROMPTS.jsonl` has one object per prompt, with unique integer `prompt_id` and nonempty `text`. Keep that file fixed. Full generation seeds are recorded as `base_seed + prompt_id*100000`; use the same prompt IDs and seed list across methods. Complete physical layer mappings are required in the own-probe export. No xRFM probe is accepted.
 
 The supplied example uses `mode=legacy_unit`, preserving the original normalized-direction classifier convention with zero global bias and block-output hooks. `mode=raw_calibrated` uses each method's own raw W/B and the approved GCAV formula, with a separately verified matching activation site. It is the optional newer generation identity, not a silent replacement for old control-table provenance. Raw CAA scalar calibration can be prepared independently with `prepare_steering_probes.py fit-caa --embedding EMB.npz --split SPLIT.npz --binding CAA_BINDING.json --out CAA.npz`; its reliability mask freezes before native train+validation refitting.
+
+CAA preparation checks the same full model layer set, positive/negative arrays and existing model/dataset/layer-count/dimension metadata as accuracy preparation. Custom tiny offline fixtures require an explicitly synthetic source identity for checkpoint export, or `scope="synthetic"` in the CAA binding; synthetic scope never shortens a known benchmark model.
 
 Every accepted prompt–seed record contains Original and steered text, token IDs, full seed and actual pre/post probabilities and alpha measurements for each active layer and step. Complete records are written atomically; identity-matched resumes skip them. `control_summary.json` uses the first forward step, one layer–prompt observation per active layer per prompt–seed. All-token trajectories remain available but are a different denominator. Success is measured after the actual finite-precision hook, so it may differ from the algebraic ideal. Missing historical trajectories cannot be reconstructed from text or populated with published numbers.
 

@@ -20,8 +20,22 @@ python scripts/plotting/plot_robustness.py \
 perturbation is checkpointed atomically, and RAPTOR/Fixed-reg also save a native
 candidate before refit. Resume verifies source, environment, embedding bytes,
 configuration, run seed and exact ordered indices. Corrupt or incompatible
-files are retained under `.rejected.*`; valid terminal failures and finite
-nonconvergence outputs are retained, never retried according to their scores.
+files (including truncated NPZ archives and frozen candidates) are retained
+under `.rejected.*` before repair. Technical exceptions are saved as
+`status=error`; the run exits 2 if execution errors or invalid directions remain.
+After fixing the execution problem, repeat the same `run --manifest ...` command
+(and `--task-index N` if used). Resume retries each error once per invocation with
+the identical perturbation, split, seed and fit budget, retaining the previous
+error checkpoint byte for byte under `run_NN.npz.error.*`. Matching frozen native
+candidates remain reusable if an exception happened during refit. Persistent
+errors keep producing a nonzero exit and a new archived attempt; there is no
+automatic retry loop within one invocation.
+
+Finite nonconvergence outputs are restored unchanged and never retried according
+to their scores. Zero or nonfinite returned directions are also retained without
+retry and keep the fixed grid incomplete; resume cannot improve those scientific
+outcomes by replacing them. Error history is not a new perturbation and never
+enters the pair denominator.
 A timeout signal stops after the current atomic perturbation; exit 75 supports
 explicit scheduler resumption. The runner does not submit or change jobs.
 

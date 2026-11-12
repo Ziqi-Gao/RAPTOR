@@ -5,6 +5,7 @@ import json
 from pathlib import Path
 from raptor.experiments.accuracy_multiseed import execute_task, file_sha256, install_signal_handlers, protocol_methods, ROW_PROTOCOL, GROUPED_PROTOCOL
 from raptor.experiments.accuracy_aggregation import _frozen_tasks
+from raptor.experiments.accuracy_preparation import verify_prepared_embedding
 
 
 def main():
@@ -31,6 +32,8 @@ def main():
         raise ValueError("accuracy tasks have colliding output targets")
     # Verify data identity, even for a dry run. Preparation never imports old results.
     for embedding in manifest["embeddings"]:
+        verify_prepared_embedding(embedding, model=embedding["model"], dataset=embedding["dataset"],
+                                  synthetic=manifest.get("scope") == "synthetic")
         if file_sha256(Path(embedding["path"])) != embedding["sha256"]:
             raise ValueError("embedding bytes differ from prepared manifest")
     tasks = []

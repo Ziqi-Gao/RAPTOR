@@ -10,18 +10,22 @@ import copy
 import json
 import math
 import signal
+import sys
 import time
 from pathlib import Path
+from zipfile import BadZipFile
 
 import numpy as np
 from sklearn.model_selection import train_test_split
 
 from raptor.core import DEFAULT_DATASETS, model_tag
 from raptor.experiments.accuracy_multiseed import (
-    METHOD_HPARAMETERS, _reject_checkpoint, array_sha256, atomic_json, atomic_savez,
+    METHOD_HPARAMETERS, _fsync_directory, _reject_checkpoint, array_sha256, atomic_json, atomic_savez,
     canonical_sha256, environment_identity, file_lock, file_sha256, source_version,
 )
-from raptor.experiments.accuracy_preparation import inspect_embedding
+from raptor.experiments.accuracy_preparation import (
+    inspect_embedding, validate_embedding_record, verify_prepared_embedding,
+)
 
 METHODS = ("singlelr", "xrfm", "gcs", "fixed_reg", "caa")
 DEFAULT_MODELS = ("Qwen/Qwen2.5-3B-Instruct", "Qwen/Qwen2.5-32B-Instruct", "google/gemma-7b-it")
@@ -95,7 +99,7 @@ def _load(path, identity):
         if metadata.get("status") not in {"candidate_frozen", "complete", "nonconverged", "error", "degenerate", "nonfinite"}:
             return None
         return arrays, metadata
-    except (OSError, ValueError, KeyError, EOFError):
+    except (OSError, ValueError, KeyError, EOFError, BadZipFile):
         return None
 
 
@@ -173,13 +177,15 @@ def _run_native(task, X, y, indices, *, native_seed, candidate_path, identity):
 
 
 def run_layer(task, *, max_new_units=None):
-    """Checkpoint every genuine perturbation, retaining terminal finite-budget outcomes."""
+    """Resume scientific outcomes; retry saved execution errors once per invocation."""
     version = source_version()
     if version["source_sha256"] != task["code_version"]["source_sha256"]:
         raise ValueError("scientific source changed after robustness preparation")
     if environment_identity()["sha256"] != task["environment_sha256"]:
         raise ValueError("environment changed after robustness preparation")
     embedding = task["embedding"]
+    verify_prepared_embedding(embedding, model=task["model"], dataset=task["dataset"],
+                              synthetic=embedding.get("scope") == "synthetic")
     if file_sha256(Path(embedding["path"])) != embedding["sha256"]:
         raise ValueError("embedding differs from robustness manifest")
     output = Path(task["output_dir"])
@@ -187,7 +193,7 @@ def run_layer(task, *, max_new_units=None):
         with np.load(embedding["path"], allow_pickle=False) as data:
             X = np.vstack([data[f"X_pos_{task['layer']}"], data[f"X_neg_{task['layer']}"]])
         y = np.r_[np.ones(embedding["n_pos"], dtype=int), np.zeros(embedding["n_neg"], dtype=int)]
-        computed = restored = 0
+        computed = restored = retried = errors = invalid_directions = 0
         for run in range(task["runs"]):
             indices, split_seed = perturbation_indices(y, seed=task["seed"], layer=task["layer"], run=run,
                 drop_fraction=task["drop_fraction"], test_size=task["test_size"], val_size=task["val_size"])
@@ -196,19 +202,35 @@ def run_layer(task, *, max_new_units=None):
                         "ordered_index_sha256": {key: array_sha256(value) for key, value in indices.items()}}
             path = output / f"run_{run:02d}.npz"
             record = _load(path, identity)
+            retry_error = False
             if record is not None:
                 # Index payload must also match the freshly reconstructed recipe.
                 if all(key in record[0] and np.array_equal(record[0][key], value) for key, value in indices.items()):
-                    restored += 1
-                    print(f"[robustness][restored] {task['method']} layer={task['layer']} run={run} status={record[1]['status']}", flush=True)
-                    continue
+                    status = record[1]["status"]
+                    if status in {"complete", "nonconverged", "degenerate", "nonfinite"}:
+                        restored += 1
+                        invalid_directions += int(not record[1].get("valid_direction"))
+                        print(f"[robustness][restored] {task['method']} layer={task['layer']} run={run} status={status}", flush=True)
+                        continue
+                    retry_error = status == "error"
             if _STOP or (max_new_units is not None and computed >= max_new_units):
                 break
-            if path.exists():
+            error_history = None
+            if retry_error:
+                # Keep the original bytes and identity; never turn a failed
+                # attempt into an additional perturbation or choose a new seed.
+                error_history = path.with_name(f"{path.name}.error.{time.time_ns()}")
+                path.rename(error_history)
+                _fsync_directory(path.parent)
+                retried += 1
+                print(f"[robustness][retry_error] {task['method']} layer={task['layer']} run={run} history={error_history.name}", flush=True)
+            elif path.exists():
                 _reject_checkpoint(path)
             arrays = dict(indices)
             metadata = {"identity": identity, "coordinate_space": COORDINATES[task["method"]],
                         "intercept_in_direction": False, "observed_code_version": version}
+            if error_history is not None:
+                metadata["retry_of_error_checkpoint"] = error_history.name
             started = time.perf_counter()
             try:
                 direction, details = _run_native(task, X, y, indices, native_seed=task["seed"]+run,
@@ -223,13 +245,16 @@ def run_layer(task, *, max_new_units=None):
             except Exception as error:
                 metadata.update(status="error", valid_direction=False,
                                 error={"type": type(error).__name__, "message": str(error)})
+                errors += 1
+            invalid_directions += int(not metadata["valid_direction"])
             metadata["elapsed_seconds"] = time.perf_counter()-started
             _save(path, arrays, metadata)
             if _load(path, identity) is None:
                 raise RuntimeError("new robustness unit failed its own integrity verification")
             computed += 1
             print(f"[robustness][computed] {task['method']} layer={task['layer']} run={run} status={metadata['status']}", flush=True)
-        return {"computed": computed, "restored": restored, "stop_requested": _STOP}
+        return {"computed": computed, "restored": restored, "retried_errors": retried,
+                "errors": errors, "invalid_directions": invalid_directions, "stop_requested": _STOP}
 
 
 def prepare(args):
@@ -250,7 +275,8 @@ def prepare(args):
         raise ValueError("reduced fitting budgets or K are permitted only for explicitly labelled synthetic_smoke")
     for model in models:
         for dataset in datasets:
-            embedding = inspect_embedding(args.emb_dir / f"{model_tag(model)}_{dataset}_embeddings.npz", model, dataset)
+            embedding = inspect_embedding(args.emb_dir / f"{model_tag(model)}_{dataset}_embeddings.npz", model, dataset,
+                                          synthetic=bool(overrides.get("synthetic_smoke", False)))
             for layer in range(embedding["layers"]):
                 for method in methods:
                     hp = copy.deepcopy(METHOD_HPARAMETERS[method]) if method != "caa" else {"direction": "raw_mean_difference"}
@@ -292,6 +318,8 @@ def validate_manifest(manifest):
                 or task["protocol"] != PROTOCOL):
             raise ValueError("task identity differs from robustness manifest")
         setting = key[:2]
+        validate_embedding_record(task["embedding"], model=task["model"], dataset=task["dataset"],
+                                  synthetic=bool(manifest.get("synthetic_smoke", False)))
         if setting in embeddings and embeddings[setting] != task["embedding"]:
             raise ValueError("methods/layers reference different embeddings")
         embeddings[setting] = task["embedding"]
@@ -399,17 +427,26 @@ def main():
         raise ValueError("duplicate robustness output directories")
     if args.dry_run:
         for task in manifest["tasks"]:
-            if not Path(task["embedding"]["path"]).is_file():
-                raise FileNotFoundError(task["embedding"]["path"])
+            verify_prepared_embedding(task["embedding"], model=task["model"], dataset=task["dataset"],
+                                      synthetic=bool(manifest.get("synthetic_smoke", False)))
         print(json.dumps({"tasks": len(targets), "layers": manifest["n_layers"], "direction_units": manifest["n_direction_units"]}))
         return
     signal.signal(signal.SIGTERM, _stop)
     signal.signal(signal.SIGUSR1, _stop)
     tasks = manifest["tasks"] if args.task_index is None else [manifest["tasks"][args.task_index]]
+    errors = invalid_directions = 0
     for task in tasks:
         result = run_layer(task)
+        errors += result["errors"]
+        invalid_directions += result["invalid_directions"]
         if result["stop_requested"]:
             raise SystemExit(75)
+    if invalid_directions:
+        print(f"Robustness run incomplete: {errors} execution error(s), "
+              f"{invalid_directions} invalid direction(s). After resolving execution errors, "
+              "resume with the same run command and manifest; only error records are retried. "
+              "Finite iteration-limit, zero and nonfinite outcomes are retained without retries.", file=sys.stderr)
+        raise SystemExit(2)
 
 
 if __name__ == "__main__":
