@@ -312,7 +312,7 @@ def eval_oracle_fold_ensemble(
     return np.mean(np.vstack(p_eval_folds), axis=0)
 
 
-def main():
+def main(argv=None):
     ap = argparse.ArgumentParser()
     ap.add_argument("--emb_npz", required=True, help="Embedding NPZ path (contains X_pos_i/X_neg_i)")
     ap.add_argument("--layer", required=True, type=int, help="Layer index to use")
@@ -340,7 +340,7 @@ def main():
     ap.add_argument("--C_fixed", type=float, default=0.001,
                     help="Fixed probe C for Experiment B")
 
-    # Probe grid: sklearn uses C = 1/lambda
+    # sklearn C is inverse penalty on sum loss; mean-loss lambda = 1/(n*C).
     ap.add_argument("--Cs", type=str, default="0.00001,0.0001,0.001,0.01,0.1,0.3,1,3,10,30,100",
                     help="comma-separated list of C values for probe LR")
     # Oracle
@@ -371,7 +371,7 @@ def main():
                     help="Disable calibration and use sigmoid(U)")
     ap.set_defaults(calibrate_oracle=True)
 
-    args = ap.parse_args()
+    args = ap.parse_args(argv)
 
     out_dir = args.out if args.out else default_out_dir(args.emb_npz, args.layer)
     os.makedirs(out_dir, exist_ok=True)
@@ -677,6 +677,7 @@ def main():
                         "n": int(n_sub),
                         "p": int(p),
                         "delta": float(p / n_sub),
+                        "aspect_ratio_n_over_p": float(n_sub / p),
                         "C": float(C),
                         "true_acc_eval": true_acc_eval,
                         "pred_acc_eval": float(pred_acc_eval),
@@ -715,6 +716,7 @@ def main():
                     "n": int(np.floor(frac * len(y_pool))),
                     "p": int(p),
                     "delta": float(p / max(1, int(np.floor(frac * len(y_pool))))),
+                    "aspect_ratio_n_over_p": float(int(np.floor(frac * len(y_pool))) / p),
                     "true_acc_mean": true_mean,
                     "pred_acc_mean": pred_mean,
                 })
@@ -736,6 +738,9 @@ def main():
 
         summary = {
             "mode": "expA",
+            "legacy_delta_convention": "p_over_n",
+            "regularization_convention": "C; mean-loss lambda=1/(n*C); old paper labels1/C",
+            "historical_paper_numbers_reproduced": False,
             "emb_npz": args.emb_npz,
             "layer": int(args.layer),
             "p": int(p),

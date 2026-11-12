@@ -1,0 +1,26 @@
+{
+  "provider": "chat_completions_https",
+  "endpoint": null,
+  "model": null,
+  "expected_response_model": null,
+  "api_key_env": "OPENAI_API_KEY",
+  "request_parameters": {},
+  "supported_parameters": [],
+  "capability_evidence": null,
+  "max_completion_tokens": null,
+  "tokenizer_family": "byte_level_bpe",
+  "timeout_seconds": 90,
+  "retry": {
+    "max_attempts_per_unit": 3,
+    "backoff_seconds": [2, 8],
+    "retry_http_status": [408, 409, 429, 500, 502, 503, 504]
+  },
+  "budget": {
+    "currency": "USD",
+    "max_usd": null,
+    "input_usd_per_million": null,
+    "output_usd_per_million": null,
+    "pricing_evidence": null,
+    "max_requests": 48600
+  }
+}

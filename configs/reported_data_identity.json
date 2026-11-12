@@ -1,0 +1,26 @@
+{
+  "schema_version": 1,
+  "scope": "historical local input identities; not permission to redistribute",
+  "files": {
+    "dataset/stsa.binary.train": {
+      "sha256": "71c04bcc41291fa47454dd670df701b14ee9249156babeaac404cfe2c8d74338",
+      "bytes": 738844
+    },
+    "dataset/sarcasm.json": {
+      "sha256": "385967db361c036919a771b3703cc0ee8cbb16dd3ae5075df2b218e213ea58d1",
+      "bytes": 5590121
+    },
+    "dataset/cities.csv": {
+      "sha256": "f2560a0c1758c69935b50125111b574b71896bb75930dd87b1d8c973c1fa086e",
+      "bytes": 95041
+    },
+    "dataset/counterfact.csv": {
+      "sha256": "5af51456d6dbd3a53d8e2ee6e4aadaca7eb02ff9136ad825866458e7283b5273",
+      "bytes": 3107796
+    },
+    "dataset/common_claim.csv": {
+      "sha256": "acc78556774ed0b5c3501bb4c254adebc692bab52cb5c6f39d91aad09cdf554f",
+      "bytes": 1607947
+    }
+  }
+}

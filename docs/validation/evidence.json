@@ -1,0 +1,282 @@
+{
+  "schema": "raptor.release_validation.v1",
+  "audit_date": "2026-11-12",
+  "scope": "code, protocol, packaging and small offline execution; no full benchmark rerun",
+  "tested_git_index_tree": "cb326684168d3ea6e10fed373bc8a9c718e52de1",
+  "tested_tree_note": "Archived source used for wheel build; this audit documentation was added afterward.",
+  "wheel": {
+    "distribution": "raptor-probes",
+    "version": "0.2.0",
+    "sha256": "cf3aa418501b0f2f3fe6ccccabba82175e808743ba1851a905c45393b609ad20",
+    "noneditable": true,
+    "build_isolated_from_host_packages": true,
+    "scientific_package_sha256": "96d57688f2689f845dbc497c84e1f0079fa123547087f9e24ae8a0da4e5fb399",
+    "source_identity_algorithm": "sha256_release_python_sources",
+    "xrfm_dependency": {
+      "distribution": "0.4.3",
+      "python_source_sha256": "d2e1d07cb86e78fada3fc4a4c1f4f72841eb12f19e6dad23c0e84782483ae9d5"
+    },
+    "source_and_rubric_files_byte_matched": 41,
+    "license_notice_files": [
+      "Apache-2.0.txt",
+      "LICENSE",
+      "neural_controllers-MIT.txt"
+    ],
+    "rubric_files": [
+      "RUBRIC.md",
+      "judge_config.template.json"
+    ]
+  },
+  "environments": {
+    "clean_core": {
+      "host_packages_visible": false,
+      "torch_installed": false,
+      "noneditable_wheel": true,
+      "pythonpath_used": false,
+      "core_imports": "passed",
+      "reported_recompute": "passed",
+      "accuracy_summaries_including_dataset_means": 420,
+      "paired_comparisons": 288
+    },
+    "numerical_runtime": {
+      "host_numerical_dependencies_visible": true,
+      "noneditable_wheel": true,
+      "pythonpath_used": false,
+      "python": "3.9.21",
+      "distribution_versions": {
+        "numpy": "1.26.4",
+        "scipy": "1.13.1",
+        "scikit-learn": "1.6.1",
+        "torch": "2.8.0",
+        "xrfm": "0.4.3",
+        "threadpoolctl": "3.6.0"
+      },
+      "additional_inspected_versions": {
+        "pandas": "2.2.3",
+        "transformers": "4.45.0",
+        "datasets": "3.5.0",
+        "matplotlib": "3.9.4",
+        "pytest": "8.4.2"
+      },
+      "actual_runtime_versions": {
+        "numpy": "1.26.4",
+        "scipy": "1.13.1",
+        "scikit-learn": "1.6.1",
+        "torch": "2.8.0+cu128",
+        "threadpoolctl": "3.6.0"
+      },
+      "timing_resources": {
+        "cpu_model": "INTEL(R) XEON(R) PLATINUM 8592+",
+        "architecture": "x86_64",
+        "backend": "cpu",
+        "threads": 1,
+        "interop_threads": 1,
+        "affinity_cpu_count": 1,
+        "torch_cuda_build": "12.8",
+        "precision": "rawfloat32; native sklearn precision; CAA means/readoutfloat64"
+      },
+      "gpu_execution_validated": false
+    }
+  },
+  "final_installed_wheel_checks": {
+    "unit_tests": {
+      "passed": 91,
+      "warnings": 2,
+      "seconds": 37.46
+    },
+    "public_script_help": {
+      "checked": 20,
+      "passed": 20
+    },
+    "documented_readme_and_paper_map_commands": {
+      "checked": 28,
+      "unknown_flags": 0
+    },
+    "timing_canary": {
+      "status": "passed",
+      "native_methods_mocked": false,
+      "computed": 50,
+      "restored": 50,
+      "computed_on_resume": 0,
+      "methods": [
+        "singlelr",
+        "xrfm",
+        "gcs",
+        "fixed_reg",
+        "dim_midpoint"
+      ],
+      "seeds": [
+        42,
+        43,
+        44,
+        45,
+        46
+      ],
+      "layers": [
+        0,
+        1
+      ],
+      "plot_formats": [
+        "png",
+        "pdf",
+        "svg"
+      ]
+    }
+  },
+  "focused_native_execution_checks": {
+    "accuracy": {
+      "synthetic_only": true,
+      "full_native_budgets": true,
+      "computed": 50,
+      "restored": 50,
+      "computed_on_resume": 0,
+      "summary_status": "complete",
+      "mean_sd_cells": 10,
+      "paired_comparisons": 8,
+      "seeds": [
+        42,
+        43,
+        44,
+        45,
+        46
+      ],
+      "plot_outputs": 4,
+      "native_methods_mocked": false
+    },
+    "scientific_equivalence": {
+      "reference_commit": "68faa5f84ce7b6a09c4f18fdd55b45156b219a1d",
+      "synthetic_layer_seed_cases": 5,
+      "all_five_methods_exact_validation_test_and_concept_sha256_match": true,
+      "final_installed_wheel_verified": true
+    },
+    "timing_signal": {
+      "signal": "SIGUSR1",
+      "active_native_method_flushed": true,
+      "saved_before_resume": 3,
+      "restored": 3,
+      "computed_after_resume": 2
+    },
+    "timing_corrupt_resume": {
+      "rejected": 1,
+      "native_units_recomputed": 1,
+      "other_units_restored": 4
+    },
+    "robustness": "Real small Fixed-reg finite-budget candidate/final checkpoint and resume; GCS diagnostics preserve native outputs; incomplete/zero directions retain fixed-denominator semantics.",
+    "structure": {
+      "synthetic_shards": 4,
+      "fractions": [
+        0.5,
+        1.0
+      ],
+      "subsample_seeds": [
+        0,
+        1
+      ],
+      "resumed_without_recompute": true,
+      "strict_aggregation": "passed",
+      "full_360_shard_grid_executed": false
+    },
+    "reported_raw_artifact_spotcheck": {
+      "model": "Qwen/Qwen2.5-32B-Instruct",
+      "dataset": "cities",
+      "seed": 42,
+      "methods_checked": 5,
+      "complete_layers_each": 64,
+      "validation_only_choice_and_saved_summary": "passed"
+    }
+  },
+  "full_grid_dry_run": {
+    "training_executed": false,
+    "embedding_caches_header_checked": 36,
+    "large_embedding_content_hashes_recomputed": false,
+    "primary_accuracy_units": 40200,
+    "grouped_sensitivity_units": 8040,
+    "unique_accuracy_unit_paths": 48240,
+    "actual_csv_grouped_zero_overlap_checks": 60,
+    "timing_tasks": 8040,
+    "timing_method_units": 40200,
+    "robustness_settings": 18,
+    "robustness_layers_per_method": 768,
+    "robustness_layer_method_tasks": 3840,
+    "robustness_direction_units": 76800,
+    "robustness_pairs": 729600
+  },
+  "not_executed": [
+    "full accuracy, grouped, robustness, timing or structure grids",
+    "large-model activation extraction",
+    "real language-model generation",
+    "paid judge/API calls",
+    "Slurm submission/modification/cancellation",
+    "GPU validation",
+    "Python3.11 CI execution"
+  ],
+  "remaining_limits": [
+    "Author-code software license deferred by owner; pending notice is not an open-source license grant.",
+    "Owner-designated local final ZIP inaccessible; public arXiv v4 used, without claiming byte identity.",
+    "Some raw dataset redistribution terms unresolved; benchmark text not republished.",
+    "Published five-method timing has mixed historical sources; author hardware confirmation does not replace missing original logs.",
+    "Historical exact robustness perturbation pairing, old steering trajectories, judge raw-score provenance and some appendix producer bindings remain unverified."
+  ],
+  "private_evidence_digests": [
+    {
+      "label": "final_core_wheel.json",
+      "sha256": "c46d975ca2fa83a7db4952304a34095eac208a9d482d41401db07f33723a5f76"
+    },
+    {
+      "label": "installed_release_check.json",
+      "sha256": "2cb6c8691ebe9964ddbc90a25431ae05d08ddaf9e14b4f99d365be02b8441b57"
+    },
+    {
+      "label": "final_pytest.log",
+      "sha256": "a2a8703f616f6d74de1e24631b7e714da88348955eb84b620d7c4cdeb60722ca"
+    },
+    {
+      "label": "clean_core_recomputed.json",
+      "sha256": "f8e47908af2ba9938ff8d389a4a8b2d378263d77387f081c6ac7a26fdcd7a5fa"
+    },
+    {
+      "label": "accuracy_canary/CANARY.json",
+      "sha256": "754d891e6de1df78209a33f4469e8ee12f71d04137e68625b6b4dc2316ad8d35"
+    },
+    {
+      "label": "timing_native_equivalence.json",
+      "sha256": "44c6c8d0e1aa38688e30b3c8e66094f82c94c077399636bbce2ebef5581832eb"
+    },
+    {
+      "label": "timing_signal_check.json",
+      "sha256": "a64c193f381666f9b4143cf5fc37284566020614175a6e847e991824b4bb02b2"
+    },
+    {
+      "label": "timing_corrupt_resume.json",
+      "sha256": "150ead41726b878aab1511f5f1db3457fe3bddcb37bb14dfb77702e9d49f420c"
+    },
+    {
+      "label": "timing_final_runtime_metadata.json",
+      "sha256": "063177628cc3e56d9030b843612a004766ce457c67f27ba43a59a96d35681437"
+    },
+    {
+      "label": "timing_full_grid_plan.json",
+      "sha256": "d5484631b06f1c06f721fab9f361f785de2dc2f867c465d9c65c37e7dac68cbb"
+    },
+    {
+      "label": "accuracy_robustness_grid_counts.json",
+      "sha256": "b512eeb449cd2a2f63b4b858938d4bff85a7c60b7503e98482c59d650e233241"
+    },
+    {
+      "label": "reported_raw_spotcheck.json",
+      "sha256": "92a2f40f4d6891e495e551de4fc3004e888df50953847bd88ef4794cf8e8f003"
+    },
+    {
+      "label": "documented_cli_links.json",
+      "sha256": "735e8bbfce84aa1dc0a80e1e867e45ce465ce805c0da9478c7156467c47cda2d"
+    },
+    {
+      "label": "final_native_equivalence.json",
+      "sha256": "553431ff3956a5b4ca60b6faba926a2a91eb3031b3b56a80266c342e52086385"
+    },
+    {
+      "label": "final_installed_wheel_timing_canary",
+      "sha256": "b8057d83488d22670b2b28c6f99b3493148f5c10d34f9385ca16ee1d3e034cc9"
+    }
+  ]
+}

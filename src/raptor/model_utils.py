@@ -3,10 +3,6 @@ from __future__ import annotations
 import numpy as np
 import torch
 
-try:  # pragma: no cover - optional tracing backend
-    from baukit import TraceDict  # type: ignore
-except Exception:  # pragma: no cover
-    TraceDict = None  # type: ignore
 
 
 def add_noise(question: str) -> str:
@@ -32,23 +28,39 @@ class LLM(torch.nn.Module):
             model = model.to(device)
         else:
             try:
-                device = next(model.parameters()).device
-            except StopIteration:
+                device = model.get_input_embeddings().weight.device
+            except (AttributeError, StopIteration):
+                try:
+                    device = next(model.parameters()).device
+                except StopIteration:
+                    device = (
+                        f"cuda:{self.cuda_id}"
+                        if torch.cuda.is_available()
+                        else "cpu"
+                    )
+            if getattr(device, "type", None) == "meta":
                 device = f"cuda:{self.cuda_id}" if torch.cuda.is_available() else "cpu"
 
         inputs = tokenizer(text, return_tensors="pt")
         inputs = {k: v.to(device) for k, v in inputs.items()}
 
-        if TraceDict is not None:
-            with TraceDict(model, self.layer_names) as traces:
-                _ = model(**inputs)["logits"]
-            return torch.stack([traces[name].output[0] for name in self.layer_names])
-
-        outputs = model(**inputs, output_hidden_states=True)
-        hidden_states = getattr(outputs, "hidden_states", None)
-        if hidden_states is None:
-            raise RuntimeError("Model did not return hidden_states.")
-        layers = list(hidden_states)[1 : 1 + self.layer_num]
-        if len(layers) != self.layer_num:
-            layers = layers[: self.layer_num]
-        return torch.stack([tensor[0] for tensor in layers])
+        # Native PyTorch hooks collect the identical module output as TraceDict.
+        # A missing tracing package must never switch to block output_hidden_states.
+        modules = dict(model.named_modules())
+        missing = [name for name in self.layer_names if name not in modules]
+        if missing:
+            raise ValueError(f"Model lacks required post_attention_layernorm taps: {missing}")
+        captured = {}
+        handles = []
+        def capture(name):
+            def hook(module, inputs, output):
+                captured[name] = output[0].detach().cpu()
+            return hook
+        try:
+            for name in self.layer_names:
+                handles.append(modules[name].register_forward_hook(capture(name)))
+            model(**inputs)
+            return [captured[name] for name in self.layer_names]
+        finally:
+            for handle in handles:
+                handle.remove()

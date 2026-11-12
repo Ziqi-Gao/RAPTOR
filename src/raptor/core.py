@@ -14,7 +14,6 @@ DEFAULT_MODELS = [
     "google/gemma-7b-it",
     "meta-llama/Meta-Llama-3.1-8B-Instruct",
     "meta-llama/Meta-Llama-3.1-70B-Instruct",
-    "meta-llama/Llama-3.3-70B-Instruct",
     "Qwen/Qwen2.5-3B-Instruct",
     "Qwen/Qwen2.5-7B-Instruct",
     "Qwen/Qwen2.5-32B-Instruct",
@@ -38,13 +37,15 @@ ALIAS_DATASETS = {
     "common": "common",
 }
 
+DATA_ROOT = Path(os.environ.get("RAPTOR_DATA_DIR", "dataset")).expanduser().resolve()
+
 DATASET_PATHS = {
-    "STSA": str(REPO_ROOT / "dataset" / "stsa.binary.train"),
-    "sarcasm": str(REPO_ROOT / "dataset" / "sarcasm.json"),
-    "hatexplain": str(REPO_ROOT / "dataset" / "hatexplain"),
-    "counterfact": str(REPO_ROOT / "dataset" / "counterfact.csv"),
-    "cities": str(REPO_ROOT / "dataset" / "cities.csv"),
-    "common": str(REPO_ROOT / "dataset" / "common_claim.csv"),
+    "STSA": str(DATA_ROOT / "stsa.binary.train"),
+    "sarcasm": str(DATA_ROOT / "sarcasm.json"),
+    "hatexplain": str(DATA_ROOT / "hatexplain"),
+    "counterfact": str(DATA_ROOT / "counterfact.csv"),
+    "cities": str(DATA_ROOT / "cities.csv"),
+    "common": str(DATA_ROOT / "common_claim.csv"),
 }
 
 # Keep machine-local cache/model overrides out of version control. If needed, pass
@@ -53,13 +54,15 @@ DATASET_PATHS = {
 MODEL_LOAD_OVERRIDES: Dict[str, str] = {}
 
 MODEL_QUANT_OVERRIDES = {
-    "meta-llama/Meta-Llama-3.1-70B-Instruct": 4,
+    "meta-llama/Meta-Llama-3.1-70B-Instruct": 16,
     "Qwen/Qwen2.5-32B-Instruct": 4,
 }
 
 
 def ensure_root() -> None:
-    os.chdir(REPO_ROOT)
+    # Public commands resolve inputs/outputs relative to the caller, including
+    # when the package is installed as a wheel.
+    pass
 
 
 def now() -> str:
@@ -104,7 +107,10 @@ def save_embeddings_npz(
     dataset_tag: str,
     X_pos_layers: List[np.ndarray],
     X_neg_layers: List[np.ndarray],
+    *,
+    embedding_identity: Optional[Dict[str, Any]] = None,
 ) -> None:
+    out_path = os.fspath(out_path)
     L = len(X_pos_layers)
     d = int(X_pos_layers[0].shape[1]) if L > 0 else 0
     save_dict: Dict[str, Any] = {}
@@ -117,7 +123,13 @@ def save_embeddings_npz(
     save_dict["meta_dataset"] = np.array([dataset_tag])
     save_dict["meta_layers"] = np.array([L])
     save_dict["meta_dim"] = np.array([d])
-    np.savez_compressed(out_path, **save_dict)
+    if embedding_identity is not None:
+        save_dict["meta_identity_json"] = np.asarray(json.dumps(embedding_identity, sort_keys=True))
+    # A preempted embedding job must not leave a corrupt file that a retry
+    # mistakes for a completed artifact.
+    tmp_path = f"{out_path}.tmp.npz"
+    np.savez_compressed(tmp_path, **save_dict)
+    os.replace(tmp_path, out_path)
 
 
 def maybe_load_embeddings(npz_path: str) -> Tuple[List[np.ndarray], List[np.ndarray]]:

@@ -1,0 +1,63 @@
+{
+  "schema_version": 1,
+  "kind": "reported_results_reference_only",
+  "paper": "https://arxiv.org/abs/2602.00158v4",
+  "source_tar_sha256": "b291d354a0ed0ef6ffc26186db7cd8f07ce0e190b219a44f2c484a0e64b46cb1",
+  "seeds": [
+    42,
+    43,
+    44,
+    45,
+    46
+  ],
+  "files": {
+    "accuracy_seeds.csv": {
+      "kind": "reported_numeric_results",
+      "source_label": "full_appendix_tables_20261106/accuracy_seed_values.csv",
+      "source_sha256": "ac101253769d6a068453db20f61fbcdcc4acf671c164c99ec7b2d46e3f7e154d",
+      "released_sha256": "ef7ce318f7a3b3736dda9455f256b68253de69028c4096d758b3d917a2efb25a",
+      "rows": 900
+    },
+    "accuracy_cells.csv": {
+      "kind": "reported_numeric_results",
+      "source_label": "full_appendix_tables_20261106/accuracy_mean_sd_values.csv",
+      "source_sha256": "e5c74c458bee36523a91a004d745c979afa3ae349eb0765be99e0d0985c6b865",
+      "released_sha256": "e5c74c458bee36523a91a004d745c979afa3ae349eb0765be99e0d0985c6b865",
+      "rows": 420
+    },
+    "robustness_settings.csv": {
+      "kind": "reported_numeric_results",
+      "source_label": "full_appendix_tables_20261106/robustness_full_values.csv",
+      "source_sha256": "dd455d5fb86b77cf269e95c1f7bd4951607737c35d67a1ea3915956674b4291a",
+      "released_sha256": "dd455d5fb86b77cf269e95c1f7bd4951607737c35d67a1ea3915956674b4291a",
+      "rows": 90
+    },
+    "timing_reported_mixed.csv": {
+      "kind": "reported_numeric_results",
+      "source_label": "runtime_five_methods_original_plus_cpu1/runtime_distribution_5methods_points.csv",
+      "source_sha256": "e7edf45a1884dcdfa982476ae649e39232df3276b8217aec447e8d5d6d611234",
+      "released_sha256": "a96d383441d4422cf9919d102249a82f23a3edbf3db5a9c9be6074e64dbcd7b3",
+      "rows": 180
+    }
+  },
+  "producer": {
+    "accuracy_three_methods": {
+      "commit": "ddf1437e2f71e3b50d63342fcabe24d8894add25",
+      "working_source_sha256": "70d16be75141994d012c0ad2318a69df8c0a6974c393c6900f87bd07ed1b0531"
+    },
+    "fixed_reg_accuracy": "b89623a331cdf9c69bd0c5cb82234fef42923b4b",
+    "midpoint_accuracy": "253d8a7456a3c0533ba69050d6dfe4d1604511b3",
+    "fixed_reg_robustness": "ff52cb105602b3c737f27cfcc7226944513d0431",
+    "timing_caa_fixedreg_science": "a699dcf5f071067ca040f245727340662bd98098",
+    "timing_caa_fixedreg_ops": "9009b0ccf855c2999e048e9139b8f3f3185e2d70"
+  },
+  "limitations": [
+    "These are licensed-author numeric summaries, not raw text or new release-run artifacts.",
+    "Historical three-method robustness exact perturbation pairing and per-record producer identities are not fully reconstructed.",
+    "Timing reference mixes three original-paper vector-recovered values with independently checked CPU1 CAA/Fixed-reg runs. It is never valid input to the new strict timing run aggregator.",
+    "Author confirms hardware and workflow were unchanged; this is an author statement, not reconstructed old clock/thread/seed/allocation/producer evidence.",
+    "Old three-method fair timing status is incomplete:21804/24120 records,87/108 setting-method points.",
+    "Fixed-reg robustness retains16 iteration-limited final directions at Gemma/STSA stored layer0.",
+    "Source basename in released CSV is a nonunique navigation hint; use method/setting/seed/split and source manifests for identity."
+  ]
+}

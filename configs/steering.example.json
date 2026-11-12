@@ -1,0 +1,24 @@
+{
+  "model": "Qwen/Qwen2.5-7B-Instruct",
+  "revision": "a09a35458c702b33eeacc393d103063234e8bc28",
+  "dataset": "STSA",
+  "direction": "neutral_to_negative",
+  "mode": "legacy_unit",
+  "activation_site": "transformer_block_output",
+  "dtype": "bfloat16",
+  "device": "cuda:0",
+  "chat_template": true,
+  "target_probability": 0.0001,
+  "reliability": {"enabled": false, "threshold": 0, "comparison": ">="},
+  "generation_seeds": [1, 2, 3],
+  "decoding": {
+    "do_sample": true,
+    "max_new_tokens": 80,
+    "temperature": 0.75,
+    "top_k": 20,
+    "top_p": 0.95,
+    "repetition_penalty": 1.1,
+    "no_repeat_ngram_size": 3,
+    "use_cache": true
+  }
+}

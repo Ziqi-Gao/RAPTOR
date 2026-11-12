@@ -1,0 +1,41 @@
+cff-version: 1.2.0
+message: "Please cite the RAPTOR paper when using this code."
+type: software
+title: "RAPTOR: Ridge-Adaptive Logistic Probes"
+authors:
+  - family-names: Gao
+    given-names: Ziqi
+  - family-names: Zhu
+    given-names: Yaotian
+  - family-names: Zeng
+    given-names: Qingcheng
+  - family-names: Zhao
+    given-names: Xu
+  - family-names: Wang
+    given-names: Ziqing
+  - family-names: Ruan
+    given-names: Feng
+  - family-names: Ding
+    given-names: Kaize
+repository-code: "https://github.com/Ziqi-Gao/RAPTOR"
+url: "https://arxiv.org/abs/2602.00158v4"
+preferred-citation:
+  type: article
+  title: "RAPTOR: Ridge-Adaptive Logistic Probes"
+  authors:
+    - family-names: Gao
+      given-names: Ziqi
+    - family-names: Zhu
+      given-names: Yaotian
+    - family-names: Zeng
+      given-names: Qingcheng
+    - family-names: Zhao
+      given-names: Xu
+    - family-names: Wang
+      given-names: Ziqing
+    - family-names: Ruan
+      given-names: Feng
+    - family-names: Ding
+      given-names: Kaize
+  year: 2026
+  url: "https://arxiv.org/abs/2602.00158v4"
