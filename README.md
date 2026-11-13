@@ -99,8 +99,10 @@ print("Synthetic test accuracy:", probe["acc_test"])
 print("Direction shape:", probe["W"].shape)  # (16,)
 ```
 
-RAPTOR fits preprocessing on training rows, chooses `C` from its native 100-value
-grid using validation accuracy, then refits on train + validation. The returned
+`C` is scikit-learn's inverse regularization parameter; see the
+[normalization details](docs/accuracy.md#regularization-normalization). RAPTOR fits
+preprocessing on training rows, chooses `C` from its native 100-value grid using
+validation accuracy, then refits on train + validation. The returned
 `W` and `B` already include the preprocessing transformation; use them on raw
 representations without another standardization step. The held-out test data is
 scored only after selection and refit. `val_acc_pre_refit` retains the candidate's
