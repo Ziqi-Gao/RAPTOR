@@ -25,8 +25,10 @@ relicensed by this repository.
 The public paper is [arXiv2602.00158v4](https://arxiv.org/abs/2602.00158v4),
 marked camera-ready and accepted at NeurIPS 2026 by its authors. The paper source
 is CC-BY4.0; this repository links it rather than copying the full manuscript.
-Only numeric reported-result summaries are candidates for redistribution; source
-texts, generated outputs, prompts with personal data, hidden states, and internal
-review logs are excluded. Existing Git history still contains earlier benchmark
+The repository includes numeric reported-result summaries and two attributed
+paper-figure PNGs for the README. [Figure sources](readme_assets.md) record the
+original PDF hashes and conversion; the full manuscript is not copied. Source
+dataset texts, generated outputs, prompts with personal data, hidden states, and
+internal review logs are excluded. Existing Git history still contains earlier benchmark
 copies. No history rewrite was performed; maintainers must resolve any historical
 redistribution concern separately.

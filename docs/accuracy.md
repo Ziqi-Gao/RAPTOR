@@ -49,6 +49,8 @@ then negative. Preprocessing is fitted only to candidate training rows.
 | `gcs` | Native 1000 sampled probes from train-subset; internal training fraction .1 and validation fraction .3; max_iter100, early_loops10, threshold .9; 1000 sampled readouts | Identical sampled probes score outer validation and test; mean individual-probe accuracy; no refit |
 | `dim_midpoint` (CAA accuracy) | Raw FP64 class means on train-subset; W=mu_positive−mu_negative; midpoint=(mu_positive+mu_negative)/2; score=W dot (h−midpoint); score>=0 predicts positive | Re-estimate raw class means on train+validation; no logistic regression or threshold tuning |
 
+<a id="regularization-normalization"></a>
+
 For the native sklearn/lbfgs implementation, fixed C=1 minimizes an objective
 equivalent to `sum(logistic_loss) + ||w||²/(2*C)` with an unpenalized intercept.
 For the paper's mean-loss objective with ridge term `lambda*||w||²/2`,
